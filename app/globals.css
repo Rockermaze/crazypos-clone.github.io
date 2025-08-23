@@ -1,0 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* brand helpers */
+:root{
+  --brand-900:#1a1446; /* dark base */
+  --brand-700:#3b2db8; /* primary */
+  --brand-500:#6b5cff; /* accent */
+}
+
+html, body {
+  height: 100%;
+}
