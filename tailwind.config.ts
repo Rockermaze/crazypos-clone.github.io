@@ -13,6 +13,7 @@ const config: Config = {
           900: 'var(--brand-900)',
           700: 'var(--brand-700)',
           500: 'var(--brand-500)',
+          100: 'var(--brand-100)',
         }
       },
       boxShadow: {

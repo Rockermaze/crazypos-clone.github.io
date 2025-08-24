@@ -14,19 +14,19 @@ export function PlanToggle({ onChange }: PlanToggleProps) {
   };
 
   return (
-    <div className="flex items-center space-x-4">
+    <div className="flex items-center space-x-1 bg-slate-100 rounded-xl p-1">
       <button
         onClick={() => toggle("monthly")}
-        className={`px-4 py-2 rounded ${
-          mode === "monthly" ? "bg-blue-600 text-white" : "bg-gray-200"
+        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+          mode === "monthly" ? "bg-white text-brand-700 shadow-sm" : "text-slate-600 hover:text-slate-900"
         }`}
       >
         Monthly
       </button>
       <button
         onClick={() => toggle("yearly")}
-        className={`px-4 py-2 rounded ${
-          mode === "yearly" ? "bg-blue-600 text-white" : "bg-gray-200"
+        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+          mode === "yearly" ? "bg-white text-brand-700 shadow-sm" : "text-slate-600 hover:text-slate-900"
         }`}
       >
         Yearly

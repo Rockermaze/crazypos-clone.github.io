@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 // Mock product data - In a real app, this would be in a database
-let products = [
-  { id: 1, name: 'iPhone 15 Pro', price: 999, stock: 25, barcode: '123456789', category: 'Phones' },
-  { id: 2, name: 'Samsung Galaxy S24', price: 899, stock: 15, barcode: '987654321', category: 'Phones' },
-  { id: 3, name: 'iPad Air', price: 599, stock: 10, barcode: '456789123', category: 'Tablets' },
-  { id: 4, name: 'MacBook Air', price: 1299, stock: 5, barcode: '789123456', category: 'Laptops' },
-  { id: 5, name: 'AirPods Pro', price: 249, stock: 30, barcode: '111222333', category: 'Accessories' },
-  { id: 6, name: 'iPhone Case', price: 29, stock: 50, barcode: '444555666', category: 'Accessories' },
-]
+let products: Array<{
+  id: number
+  name: string
+  price: number
+  stock: number
+  barcode: string
+  category: string
+}> = []
 
 export async function GET() {
   return NextResponse.json({ products })
@@ -118,4 +118,4 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-Dont add any content keep it blank do noy add any stuff like products or customers etc make sure I can do it but do not do it now.
+

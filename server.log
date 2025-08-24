@@ -1,0 +1,58 @@
+
+> crazypos-style@0.1.0 dev
+> next dev
+
+ ⚠ `experimental.typedRoutes` has been moved to `typedRoutes`. Please update your next.config.ts file accordingly.
+ ⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of /home/akshat/package-lock.json as the root directory.
+ To silence this warning, set `outputFileTracingRoot` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/output#caveats for more information.
+ Detected additional lockfiles: 
+   * /home/akshat/Desktop/crazypos-clone/crazypos-clone/pnpm-lock.yaml
+
+   ▲ Next.js 15.5.0
+   - Local:        http://localhost:3000
+   - Network:      http://192.168.1.8:3000
+   - Environments: .env.local
+   - Experiments (use with caution):
+     ⨯ typedRoutes
+
+ ✓ Starting...
+ ✓ Ready in 1405ms
+ ○ Compiling / ...
+ ✓ Compiled / in 2s (690 modules)
+ GET / 200 in 2326ms
+ ✓ Compiled in 127ms (278 modules)
+ ✓ Compiled /auth/login in 364ms (689 modules)
+ GET /auth/login 200 in 578ms
+ ✓ Compiled /auth/start in 195ms (696 modules)
+ GET /auth/start 200 in 330ms
+ ✓ Compiled /dashboard in 207ms (703 modules)
+ GET /dashboard 200 in 314ms
+ ✓ Compiled /products in 267ms (708 modules)
+ GET /products 200 in 364ms
+ GET / 200 in 106ms
+ ○ Compiling /api/auth/[...nextauth] ...
+ ✓ Compiled /api/auth/[...nextauth] in 543ms (1026 modules)
+ GET /api/auth/session 200 in 1124ms
+ GET /auth/start 200 in 53ms
+ GET /api/auth/providers 200 in 21ms
+ GET /api/auth/csrf 200 in 10ms
+ POST /api/auth/signin/google 200 in 628ms
+ GET /auth/start 200 in 159ms
+ GET /api/auth/session 200 in 24ms
+ GET /api/auth/providers 200 in 35ms
+ GET /api/auth/csrf 200 in 11ms
+ POST /api/auth/callback/credentials 200 in 16ms
+ GET /api/auth/session 200 in 14ms
+ GET /dashboard 200 in 38ms
+ GET / 200 in 35ms
+ GET / 200 in 24ms
+ GET /products 200 in 25ms
+ GET / 200 in 20ms
+ GET /auth/start 200 in 17ms
+ GET /api/auth/providers 200 in 25ms
+ GET /api/auth/csrf 200 in 10ms
+ POST /api/auth/callback/credentials 200 in 11ms
+ GET /api/auth/session 200 in 9ms
+ GET /dashboard 200 in 18ms

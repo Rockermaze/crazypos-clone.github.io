@@ -113,6 +113,12 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   handler satisfies AppPageConfig<"/terms">
 }
 
+// Validate ../../app/api/auth/[...nextauth]/route.ts
+{
+  const handler = {} as typeof import("../../app/api/auth/[...nextauth]/route.js")
+  handler satisfies RouteHandlerConfig<"/api/auth/[...nextauth]">
+}
+
 // Validate ../../app/api/auth/route.ts
 {
   const handler = {} as typeof import("../../app/api/auth/route.js")

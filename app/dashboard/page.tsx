@@ -1,21 +1,52 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSession, signOut } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
 import { Container } from '@/components/Container'
 import Link from 'next/link'
 
-// Mock data for demonstration
-const mockProducts = [
+// Demo products for client presentation
+const demoProducts = [
   { id: 1, name: 'iPhone 15 Pro', price: 999, stock: 25, barcode: '123456789' },
   { id: 2, name: 'Samsung Galaxy S24', price: 899, stock: 15, barcode: '987654321' },
   { id: 3, name: 'iPad Air', price: 599, stock: 10, barcode: '456789123' },
   { id: 4, name: 'MacBook Air', price: 1299, stock: 5, barcode: '789123456' },
+  { id: 5, name: 'AirPods Pro', price: 249, stock: 30, barcode: '111222333' },
+  { id: 6, name: 'Phone Case', price: 29, stock: 50, barcode: '444555666' },
 ]
 
 export default function DashboardPage() {
+  const { data: session, status } = useSession()
+  const router = useRouter()
   const [cart, setCart] = useState<Array<{id: number, name: string, price: number, quantity: number}>>([])
   const [activeTab, setActiveTab] = useState('sales')
 
-  const addToCart = (product: typeof mockProducts[0]) => {
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push('/auth/login')
+    }
+  }, [status, router])
+
+  const handleLogout = async () => {
+    await signOut({ callbackUrl: '/' })
+  }
+
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-700 mx-auto"></div>
+          <p className="mt-4 text-slate-600">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!session) {
+    return null
+  }
+
+  const addToCart = (product: typeof demoProducts[0]) => {
     setCart(prev => {
       const existing = prev.find(item => item.id === product.id)
       if (existing) {
@@ -65,8 +96,15 @@ export default function DashboardPage() {
               <span className="text-slate-600">Dashboard</span>
             </div>
             <div className="flex items-center gap-4">
-              <span className="text-sm text-slate-600">Welcome, Store Owner</span>
-              <button className="text-sm text-brand-700 hover:text-brand-500">Logout</button>
+              <span className="text-sm text-slate-600">
+                Welcome, {session.user?.name || session.user?.email || 'Store Owner'}
+              </span>
+              <button 
+                onClick={handleLogout}
+                className="text-sm text-brand-700 hover:text-brand-500"
+              >
+                Logout
+              </button>
             </div>
           </div>
         </Container>
@@ -104,7 +142,7 @@ export default function DashboardPage() {
                 <div className="bg-white rounded-xl p-6">
                   <h2 className="text-xl font-bold mb-4">Product Catalog</h2>
                   <div className="grid gap-4 md:grid-cols-2">
-                    {mockProducts.map(product => (
+                    {demoProducts.map(product => (
                       <div key={product.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
                         <div className="flex justify-between items-start">
                           <div>
@@ -212,7 +250,7 @@ export default function DashboardPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {mockProducts.map(product => (
+                      {demoProducts.map(product => (
                         <tr key={product.id} className="border-b">
                           <td className="py-3 px-4 font-medium">{product.name}</td>
                           <td className="py-3 px-4">${product.price}</td>
@@ -289,12 +327,12 @@ export default function DashboardPage() {
                   <div className="space-y-4">
                     <div className="flex justify-between">
                       <span>Total Products:</span>
-                      <span className="font-bold">{mockProducts.length}</span>
+                      <span className="font-bold">{demoProducts.length}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Low Stock Items:</span>
                       <span className="font-bold text-red-600">
-                        {mockProducts.filter(p => p.stock < 10).length}
+                        {demoProducts.filter(p => p.stock < 10).length}
                       </span>
                     </div>
                     <div className="flex justify-between">
@@ -359,5 +397,3 @@ export default function DashboardPage() {
     </div>
   )
 }
-
-make sure to keep the user experience as it was originally like the clone of crazy pos the code which I have already given dont mae any changes in to it.
