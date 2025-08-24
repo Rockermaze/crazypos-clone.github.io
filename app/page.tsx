@@ -20,10 +20,6 @@ export default function Home(){
                 <Link href="/auth/start" className="rounded-xl bg-brand-700 px-5 py-3 text-white font-semibold shadow-soft">Start Free →</Link>
                 <Link href="/products" className="rounded-xl border px-5 py-3 font-semibold">Discover Features</Link>
               </div>
-              <div className="mt-8 flex items-center gap-4">
-                <Image src="/app-store-badge.svg" width={160} height={50} alt="Download on the App Store"/>
-                <Image src="/google-play-badge.svg" width={160} height={50} alt="Get it on Google Play"/>
-              </div>
             </div>
             <div className="relative">
               <div className="aspect-[4/3] w-full rounded-3xl bg-gradient-to-br from-brand-500/20 to-brand-700/30" />

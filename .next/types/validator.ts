@@ -47,66 +47,102 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
 }
 
 
-// Validate ..\..\app\about\page.tsx
+// Validate ../../app/about/page.tsx
 {
-  const handler = {} as typeof import("..\\..\\app\\about\\page.js")
+  const handler = {} as typeof import("../../app/about/page.js")
   handler satisfies AppPageConfig<"/about">
 }
 
-// Validate ..\..\app\contact\page.tsx
+// Validate ../../app/auth/login/page.tsx
 {
-  const handler = {} as typeof import("..\\..\\app\\contact\\page.js")
+  const handler = {} as typeof import("../../app/auth/login/page.js")
+  handler satisfies AppPageConfig<"/auth/login">
+}
+
+// Validate ../../app/auth/start/page.tsx
+{
+  const handler = {} as typeof import("../../app/auth/start/page.js")
+  handler satisfies AppPageConfig<"/auth/start">
+}
+
+// Validate ../../app/contact/page.tsx
+{
+  const handler = {} as typeof import("../../app/contact/page.js")
   handler satisfies AppPageConfig<"/contact">
 }
 
-// Validate ..\..\app\page.tsx
+// Validate ../../app/dashboard/page.tsx
 {
-  const handler = {} as typeof import("..\\..\\app\\page.js")
+  const handler = {} as typeof import("../../app/dashboard/page.js")
+  handler satisfies AppPageConfig<"/dashboard">
+}
+
+// Validate ../../app/page.tsx
+{
+  const handler = {} as typeof import("../../app/page.js")
   handler satisfies AppPageConfig<"/">
 }
 
-// Validate ..\..\app\pricing\page.tsx
+// Validate ../../app/pricing/page.tsx
 {
-  const handler = {} as typeof import("..\\..\\app\\pricing\\page.js")
+  const handler = {} as typeof import("../../app/pricing/page.js")
   handler satisfies AppPageConfig<"/pricing">
 }
 
-// Validate ..\..\app\privacy\page.tsx
+// Validate ../../app/privacy/page.tsx
 {
-  const handler = {} as typeof import("..\\..\\app\\privacy\\page.js")
+  const handler = {} as typeof import("../../app/privacy/page.js")
   handler satisfies AppPageConfig<"/privacy">
 }
 
-// Validate ..\..\app\products\page.tsx
+// Validate ../../app/products/page.tsx
 {
-  const handler = {} as typeof import("..\\..\\app\\products\\page.js")
+  const handler = {} as typeof import("../../app/products/page.js")
   handler satisfies AppPageConfig<"/products">
 }
 
-// Validate ..\..\app\support\page.tsx
+// Validate ../../app/support/page.tsx
 {
-  const handler = {} as typeof import("..\\..\\app\\support\\page.js")
+  const handler = {} as typeof import("../../app/support/page.js")
   handler satisfies AppPageConfig<"/support">
 }
 
-// Validate ..\..\app\terms\page.tsx
+// Validate ../../app/terms/page.tsx
 {
-  const handler = {} as typeof import("..\\..\\app\\terms\\page.js")
+  const handler = {} as typeof import("../../app/terms/page.js")
   handler satisfies AppPageConfig<"/terms">
 }
 
-// Validate ..\..\app\api\contact\route.ts
+// Validate ../../app/api/auth/route.ts
 {
-  const handler = {} as typeof import("..\\..\\app\\api\\contact\\route.js")
+  const handler = {} as typeof import("../../app/api/auth/route.js")
+  handler satisfies RouteHandlerConfig<"/api/auth">
+}
+
+// Validate ../../app/api/contact/route.ts
+{
+  const handler = {} as typeof import("../../app/api/contact/route.js")
   handler satisfies RouteHandlerConfig<"/api/contact">
+}
+
+// Validate ../../app/api/products/route.ts
+{
+  const handler = {} as typeof import("../../app/api/products/route.js")
+  handler satisfies RouteHandlerConfig<"/api/products">
+}
+
+// Validate ../../app/api/sales/route.ts
+{
+  const handler = {} as typeof import("../../app/api/sales/route.js")
+  handler satisfies RouteHandlerConfig<"/api/sales">
 }
 
 
 
 
 
-// Validate ..\..\app\layout.tsx
+// Validate ../../app/layout.tsx
 {
-  const handler = {} as typeof import("..\\..\\app\\layout.js")
+  const handler = {} as typeof import("../../app/layout.js")
   handler satisfies LayoutConfig<"/">
 }

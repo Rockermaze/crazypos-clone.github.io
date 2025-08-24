@@ -1,4 +1,4 @@
-// File: D:\crazypos-style\app\page.tsx
+// File: /home/akshat/Desktop/crazypos-clone/crazypos-clone/app/page.tsx
 import * as entry from '../../../app/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 
