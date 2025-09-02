@@ -25,7 +25,6 @@ export default function Home(){
               <div className="aspect-[4/3] w-full rounded-3xl bg-gradient-to-br from-brand-500/20 to-brand-700/30" />
             </div>
           </div>
-          <BadgeRow className="mt-12"/>
         </Container>
       </Section>
 

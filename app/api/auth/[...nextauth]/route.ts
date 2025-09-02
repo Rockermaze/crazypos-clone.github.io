@@ -1,6 +1,7 @@
 import NextAuth from 'next-auth'
 import GoogleProvider from 'next-auth/providers/google'
 import CredentialsProvider from 'next-auth/providers/credentials'
+import { NextAuthOptions } from 'next-auth'
 
 // Mock user database - In production, use a real database
 const users = [
@@ -13,11 +14,18 @@ const users = [
   }
 ]
 
-const authOptions = {
+const authOptions: NextAuthOptions = {
   providers: [
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID || '',
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+      clientId: process.env.GOOGLE_CLIENT_ID as string,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
+      authorization: {
+        params: {
+          prompt: "consent",
+          access_type: "offline",
+          response_type: "code"
+        }
+      }
     }),
     CredentialsProvider({
       name: 'credentials',
@@ -48,28 +56,35 @@ const authOptions = {
     })
   ],
   callbacks: {
-    async session({ session, token }: any) {
+    async signIn({ user, account, profile }) {
+      // Allow all sign-ins for Google and credentials
+      return true
+    },
+    async session({ session, token }) {
       return {
         ...session,
         user: {
           ...session.user,
           id: token.sub,
-          businessName: token.businessName
+          businessName: token.businessName || 'Your Store'
         }
       }
     },
-    async jwt({ token, user }: any) {
+    async jwt({ token, user, account }) {
       if (user) {
-        token.businessName = user.businessName
+        token.businessName = user.businessName || 'Your Store'
       }
       return token
     }
   },
   pages: {
     signIn: '/auth/login',
-    signUp: '/auth/start'
+    error: '/auth/error'
   },
-  secret: process.env.NEXTAUTH_SECRET || 'dev-secret-key',
+  session: {
+    strategy: 'jwt'
+  },
+  secret: process.env.NEXTAUTH_SECRET,
 }
 
 const handler = NextAuth(authOptions)
