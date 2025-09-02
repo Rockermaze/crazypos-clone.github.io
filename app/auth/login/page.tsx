@@ -65,6 +65,14 @@ export default function AuthLoginPage() {
           <div className="text-center mb-8">
             <h1 className="text-3xl font-extrabold">Welcome Back</h1>
             <p className="mt-2 text-slate-600">Sign in to your YourPOS account</p>
+            
+            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+              <p className="text-sm font-medium text-blue-800 mb-1">Demo Account</p>
+              <p className="text-xs text-blue-600">
+                Email: demo@yourpos.com<br />
+                Password: demo123
+              </p>
+            </div>
           </div>
 
           {error && (

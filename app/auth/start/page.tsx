@@ -33,8 +33,29 @@ export default function AuthStartPage() {
     setError('')
     
     try {
-      // For demo purposes, we'll just redirect to dashboard
-      // In production, you'd create the user account first
+      // First, register the user
+      const registerResponse = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          email: formData.email,
+          password: formData.password,
+          businessName: formData.businessName,
+        }),
+      })
+
+      const registerData = await registerResponse.json()
+
+      if (!registerResponse.ok) {
+        setError(registerData.error || 'Registration failed')
+        return
+      }
+
+      // If registration successful, sign in the user
       const result = await signIn('credentials', {
         email: formData.email,
         password: formData.password,
@@ -42,11 +63,12 @@ export default function AuthStartPage() {
       })
       
       if (result?.error) {
-        setError('Account creation failed. Please try again.')
+        setError('Account created but login failed. Please try signing in manually.')
       } else {
         router.push('/dashboard')
       }
     } catch (err) {
+      console.error('Registration error:', err)
       setError('An error occurred. Please try again.')
     } finally {
       setIsLoading(false)

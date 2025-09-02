@@ -2,17 +2,7 @@ import NextAuth from 'next-auth'
 import GoogleProvider from 'next-auth/providers/google'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import { NextAuthOptions } from 'next-auth'
-
-// Mock user database - In production, use a real database
-const users = [
-  {
-    id: '1',
-    email: 'demo@yourpos.com',
-    password: 'demo123',
-    name: 'Demo User',
-    businessName: 'Demo Store'
-  }
-]
+import { findUserByCredentials } from '@/lib/userStorage'
 
 const authOptions: NextAuthOptions = {
   providers: [
@@ -38,9 +28,7 @@ const authOptions: NextAuthOptions = {
           return null
         }
 
-        const user = users.find(
-          u => u.email === credentials.email && u.password === credentials.password
-        )
+        const user = findUserByCredentials(credentials.email, credentials.password)
 
         if (user) {
           return {

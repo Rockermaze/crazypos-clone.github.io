@@ -5,6 +5,9 @@ import { useRouter } from 'next/navigation'
 import { Container } from '@/components/Container'
 import { Modal } from '@/components/Modal'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { ProductModal } from '@/components/ProductModal'
+import { PaymentModal, PaymentData } from '@/components/PaymentModal'
+import { RepairModal } from '@/components/RepairModal'
 import { DataManager } from '@/lib/dataManager'
 import { Product, Sale, RepairTicket, StoreSettings, SaleItem } from '@/types'
 import Link from 'next/link'
@@ -26,7 +29,8 @@ export default function DashboardPage() {
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [showRepairModal, setShowRepairModal] = useState(false)
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
-  const [editingItem, setEditingItem] = useState<any>(null)
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null)
   
   // Form states
   const [searchTerm, setSearchTerm] = useState('')
@@ -47,6 +51,8 @@ export default function DashboardPage() {
     if (status === 'authenticated') {
       DataManager.initializeData()
       setProducts(DataManager.getProducts())
+      setSales(DataManager.getSales())
+      setRepairs(DataManager.getRepairs())
       setLoading(false)
     }
   }, [status])
@@ -114,9 +120,126 @@ export default function DashboardPage() {
 
   const total = cart.reduce((sum, item) => sum + item.totalPrice, 0)
 
+  // Product management functions
+  const handleAddProduct = () => {
+    setEditingProduct(null)
+    setShowProductModal(true)
+  }
+
+  const handleEditProduct = (product: Product) => {
+    setEditingProduct(product)
+    setShowProductModal(true)
+  }
+
+  const handleDeleteProduct = (product: Product) => {
+    setProductToDelete(product)
+    setShowConfirmDialog(true)
+  }
+
+  const confirmDeleteProduct = () => {
+    if (productToDelete) {
+      const success = DataManager.deleteProduct(productToDelete.id)
+      if (success) {
+        setProducts(DataManager.getProducts())
+        setNotification({ message: 'Product deleted successfully', type: 'success' })
+      } else {
+        setNotification({ message: 'Failed to delete product', type: 'error' })
+      }
+    }
+    setProductToDelete(null)
+    setShowConfirmDialog(false)
+  }
+
+  const handleSaveProduct = (productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => {
+    try {
+      if (editingProduct) {
+        // Update existing product
+        const updated = DataManager.updateProduct(editingProduct.id, productData)
+        if (updated) {
+          setProducts(DataManager.getProducts())
+          setNotification({ message: 'Product updated successfully', type: 'success' })
+        }
+      } else {
+        // Add new product
+        DataManager.addProduct(productData)
+        setProducts(DataManager.getProducts())
+        setNotification({ message: 'Product added successfully', type: 'success' })
+      }
+      setShowProductModal(false)
+      setEditingProduct(null)
+    } catch (error) {
+      setNotification({ message: 'Failed to save product', type: 'error' })
+    }
+  }
+
+  // Payment processing functions
+  const handleProcessPayment = () => {
+    if (cart.length === 0) {
+      setNotification({ message: 'Cart is empty', type: 'error' })
+      return
+    }
+    setShowPaymentModal(true)
+  }
+
+  const handlePaymentComplete = (paymentData: PaymentData) => {
+    try {
+      // Create sale record
+      const saleData = {
+        items: cart,
+        subtotal: paymentData.subtotal,
+        tax: paymentData.tax,
+        discount: paymentData.discount,
+        total: paymentData.total,
+        paymentMethod: paymentData.paymentMethod,
+        paymentStatus: 'completed' as const,
+        customerInfo: paymentData.customerInfo,
+        cashierId: session?.user?.id || 'unknown'
+      }
+
+      const sale = DataManager.addSale(saleData)
+      setSales(DataManager.getSales())
+      
+      // Clear cart
+      setCart([])
+      setShowPaymentModal(false)
+      
+      setNotification({ 
+        message: `Sale completed! Receipt #${sale.receiptNumber}`, 
+        type: 'success' 
+      })
+    } catch (error) {
+      setNotification({ message: 'Failed to process payment', type: 'error' })
+    }
+  }
+
+  // Repair management functions
+  const handleAddRepair = () => {
+    setShowRepairModal(true)
+  }
+
+  const handleSaveRepair = (repairData: Omit<RepairTicket, 'id' | 'ticketNumber' | 'createdAt' | 'updatedAt'>) => {
+    try {
+      DataManager.addRepair(repairData)
+      setRepairs(DataManager.getRepairs())
+      setNotification({ message: 'Repair ticket created successfully', type: 'success' })
+      setShowRepairModal(false)
+    } catch (error) {
+      setNotification({ message: 'Failed to create repair ticket', type: 'error' })
+    }
+  }
+
+  // Clear notification after 3 seconds
+  useEffect(() => {
+    if (notification) {
+      const timer = setTimeout(() => setNotification(null), 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [notification])
+
   const tabs = [
     { id: 'sales', label: 'Sales', icon: '💳' },
     { id: 'inventory', label: 'Inventory', icon: '📦' },
+    { id: 'history', label: 'Sales History', icon: '📋' },
     { id: 'repairs', label: 'Repairs', icon: '🔧' },
     { id: 'reports', label: 'Reports', icon: '📊' },
     { id: 'settings', label: 'Settings', icon: '⚙️' },
@@ -178,9 +301,46 @@ export default function DashboardPage() {
               {/* Product Selection */}
               <div className="lg:col-span-2">
                 <div className="bg-white rounded-xl p-6">
-                  <h2 className="text-xl font-bold mb-4">Product Catalog</h2>
+                  <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-xl font-bold">Product Catalog</h2>
+                  </div>
+                  
+                  {/* Search and Filter */}
+                  <div className="flex gap-4 mb-6">
+                    <div className="flex-1">
+                      <input
+                        type="text"
+                        placeholder="Search products..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full rounded-xl border border-slate-300 px-3 py-2 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                      />
+                    </div>
+                    <select
+                      value={filterCategory}
+                      onChange={(e) => setFilterCategory(e.target.value)}
+                      className="rounded-xl border border-slate-300 px-3 py-2 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                    >
+                      <option value="all">All Categories</option>
+                      <option value="Electronics">Electronics</option>
+                      <option value="Accessories">Accessories</option>
+                      <option value="Phones">Phones</option>
+                      <option value="Tablets">Tablets</option>
+                      <option value="Laptops">Laptops</option>
+                      <option value="Audio">Audio</option>
+                    </select>
+                  </div>
+                  
                   <div className="grid gap-4 md:grid-cols-2">
-                    {products.map(product => (
+                    {products
+                      .filter(product => {
+                        const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                            product.barcode.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                            (product.category || '').toLowerCase().includes(searchTerm.toLowerCase())
+                        const matchesCategory = filterCategory === 'all' || product.category === filterCategory
+                        return matchesSearch && matchesCategory && product.isActive
+                      })
+                      .map(product => (
                       <div key={product.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
                         <div className="flex justify-between items-start">
                           <div>
@@ -249,7 +409,10 @@ export default function DashboardPage() {
                       </div>
                       
                       <div className="space-y-2">
-                        <button className="w-full rounded-xl bg-brand-700 px-4 py-3 text-white font-semibold hover:bg-brand-500">
+                        <button 
+                          onClick={handleProcessPayment}
+                          className="w-full rounded-xl bg-brand-700 px-4 py-3 text-white font-semibold hover:bg-brand-500"
+                        >
                           Process Payment
                         </button>
                         <button 
@@ -271,7 +434,10 @@ export default function DashboardPage() {
               <div className="bg-white rounded-xl p-6">
                 <div className="flex justify-between items-center mb-6">
                   <h2 className="text-xl font-bold">Inventory Management</h2>
-                  <button className="rounded-xl bg-brand-700 px-4 py-2 text-white font-medium hover:bg-brand-500">
+                  <button 
+                    onClick={handleAddProduct}
+                    className="rounded-xl bg-brand-700 px-4 py-2 text-white font-medium hover:bg-brand-500"
+                  >
                     Add Product
                   </button>
                 </div>
@@ -304,8 +470,18 @@ export default function DashboardPage() {
                           <td className="py-3 px-4 text-slate-500">{product.barcode}</td>
                           <td className="py-3 px-4">
                             <div className="flex gap-2">
-                              <button className="text-sm text-brand-700 hover:text-brand-500">Edit</button>
-                              <button className="text-sm text-red-600 hover:text-red-500">Delete</button>
+                              <button 
+                                onClick={() => handleEditProduct(product)}
+                                className="text-sm text-brand-700 hover:text-brand-500"
+                              >
+                                Edit
+                              </button>
+                              <button 
+                                onClick={() => handleDeleteProduct(product)}
+                                className="text-sm text-red-600 hover:text-red-500"
+                              >
+                                Delete
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -317,24 +493,146 @@ export default function DashboardPage() {
             </div>
           )}
 
+          {activeTab === 'history' && (
+            <div className="p-6">
+              <div className="bg-white rounded-xl p-6">
+                <h2 className="text-xl font-bold mb-6">Sales History</h2>
+                
+                {sales.length === 0 ? (
+                  <div className="text-center py-12">
+                    <div className="text-6xl mb-4">📋</div>
+                    <h3 className="text-xl font-semibold mb-2">No Sales Yet</h3>
+                    <p className="text-slate-600">Start selling to see your sales history here.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="text-left py-3 px-4">Receipt #</th>
+                          <th className="text-left py-3 px-4">Date</th>
+                          <th className="text-left py-3 px-4">Items</th>
+                          <th className="text-left py-3 px-4">Total</th>
+                          <th className="text-left py-3 px-4">Payment</th>
+                          <th className="text-left py-3 px-4">Customer</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sales.slice().reverse().map(sale => (
+                          <tr key={sale.id} className="border-b hover:bg-slate-50">
+                            <td className="py-3 px-4 font-medium">{sale.receiptNumber}</td>
+                            <td className="py-3 px-4 text-sm text-slate-600">
+                              {new Date(sale.createdAt).toLocaleDateString()}
+                            </td>
+                            <td className="py-3 px-4 text-sm">
+                              {sale.items.length} item{sale.items.length !== 1 ? 's' : ''}
+                            </td>
+                            <td className="py-3 px-4 font-bold">${sale.total.toFixed(2)}</td>
+                            <td className="py-3 px-4">
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                sale.paymentMethod === 'cash' ? 'bg-green-100 text-green-800' :
+                                sale.paymentMethod === 'card' ? 'bg-blue-100 text-blue-800' :
+                                'bg-purple-100 text-purple-800'
+                              }`}>
+                                {sale.paymentMethod.toUpperCase()}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-sm text-slate-600">
+                              {sale.customerInfo?.name || sale.customerInfo?.email || 'Guest'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {activeTab === 'repairs' && (
             <div className="p-6">
               <div className="bg-white rounded-xl p-6">
                 <div className="flex justify-between items-center mb-6">
                   <h2 className="text-xl font-bold">Repair Management</h2>
-                  <button className="rounded-xl bg-brand-700 px-4 py-2 text-white font-medium hover:bg-brand-500">
+                  <button 
+                    onClick={handleAddRepair}
+                    className="rounded-xl bg-brand-700 px-4 py-2 text-white font-medium hover:bg-brand-500"
+                  >
                     New Repair Ticket
                   </button>
                 </div>
                 
-                <div className="text-center py-12">
-                  <div className="text-6xl mb-4">🔧</div>
-                  <h3 className="text-xl font-semibold mb-2">Repair Management</h3>
-                  <p className="text-slate-600 mb-6">Track device repairs, parts inventory, and customer communications.</p>
-                  <button className="rounded-xl bg-brand-700 px-6 py-3 text-white font-medium hover:bg-brand-500">
-                    Create First Repair Ticket
-                  </button>
-                </div>
+                {repairs.length === 0 ? (
+                  <div className="text-center py-12">
+                    <div className="text-6xl mb-4">🔧</div>
+                    <h3 className="text-xl font-semibold mb-2">No Repair Tickets</h3>
+                    <p className="text-slate-600 mb-6">Create your first repair ticket to start tracking device repairs.</p>
+                    <button 
+                      onClick={handleAddRepair}
+                      className="rounded-xl bg-brand-700 px-6 py-3 text-white font-medium hover:bg-brand-500"
+                    >
+                      Create First Repair Ticket
+                    </button>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="text-left py-3 px-4">Ticket #</th>
+                          <th className="text-left py-3 px-4">Customer</th>
+                          <th className="text-left py-3 px-4">Device</th>
+                          <th className="text-left py-3 px-4">Status</th>
+                          <th className="text-left py-3 px-4">Priority</th>
+                          <th className="text-left py-3 px-4">Est. Cost</th>
+                          <th className="text-left py-3 px-4">Date</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {repairs.slice().reverse().map(repair => (
+                          <tr key={repair.id} className="border-b hover:bg-slate-50">
+                            <td className="py-3 px-4 font-medium">{repair.ticketNumber}</td>
+                            <td className="py-3 px-4">
+                              <div>
+                                <p className="font-medium">{repair.customerInfo.name}</p>
+                                <p className="text-xs text-slate-500">{repair.customerInfo.phone}</p>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <p className="font-medium">{repair.deviceInfo.brand} {repair.deviceInfo.model}</p>
+                              <p className="text-xs text-slate-500">{repair.deviceInfo.issueDescription.slice(0, 30)}...</p>
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                repair.status === 'completed' ? 'bg-green-100 text-green-800' :
+                                repair.status === 'in-progress' ? 'bg-blue-100 text-blue-800' :
+                                repair.status === 'waiting-parts' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-slate-100 text-slate-800'
+                              }`}>
+                                {repair.status.replace('-', ' ').toUpperCase()}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                repair.priority === 'urgent' ? 'bg-red-100 text-red-800' :
+                                repair.priority === 'high' ? 'bg-orange-100 text-orange-800' :
+                                repair.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-slate-100 text-slate-800'
+                              }`}>
+                                {repair.priority.toUpperCase()}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4">${repair.estimatedCost.toFixed(2)}</td>
+                            <td className="py-3 px-4 text-sm text-slate-600">
+                              {new Date(repair.dateReceived).toLocaleDateString()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -432,6 +730,64 @@ export default function DashboardPage() {
           )}
         </main>
       </div>
+
+      {/* Notification */}
+      {notification && (
+        <div className={`fixed top-4 right-4 p-4 rounded-xl shadow-lg z-50 ${
+          notification.type === 'success' 
+            ? 'bg-green-100 text-green-800 border border-green-200' 
+            : 'bg-red-100 text-red-800 border border-red-200'
+        }`}>
+          {notification.message}
+        </div>
+      )}
+
+      {/* Product Modal */}
+      {showProductModal && (
+        <ProductModal
+          isOpen={showProductModal}
+          onClose={() => {
+            setShowProductModal(false)
+            setEditingProduct(null)
+          }}
+          onSave={handleSaveProduct}
+          product={editingProduct}
+        />
+      )}
+
+      {/* Payment Modal */}
+      {showPaymentModal && (
+        <PaymentModal
+          isOpen={showPaymentModal}
+          onClose={() => setShowPaymentModal(false)}
+          onPaymentComplete={handlePaymentComplete}
+          cartItems={cart}
+          total={total}
+        />
+      )}
+
+      {/* Repair Modal */}
+      {showRepairModal && (
+        <RepairModal
+          isOpen={showRepairModal}
+          onClose={() => setShowRepairModal(false)}
+          onSave={handleSaveRepair}
+        />
+      )}
+
+      {/* Confirm Delete Dialog */}
+      {showConfirmDialog && productToDelete && (
+        <ConfirmDialog
+          isOpen={showConfirmDialog}
+          onClose={() => {
+            setShowConfirmDialog(false)
+            setProductToDelete(null)
+          }}
+          onConfirm={confirmDeleteProduct}
+          title="Delete Product"
+          message={`Are you sure you want to delete "${productToDelete.name}"? This action cannot be undone.`}
+        />
+      )}
     </div>
   )
 }
