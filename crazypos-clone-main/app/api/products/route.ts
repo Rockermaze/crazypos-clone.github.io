@@ -1,0 +1,121 @@
+import { NextRequest, NextResponse } from 'next/server'
+
+// Mock product data - In a real app, this would be in a database
+let products: Array<{
+  id: number
+  name: string
+  price: number
+  stock: number
+  barcode: string
+  category: string
+}> = []
+
+export async function GET() {
+  return NextResponse.json({ products })
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const { action, ...data } = await request.json()
+
+    if (action === 'create') {
+      const { name, price, stock, barcode, category } = data
+      
+      const newProduct = {
+        id: Math.max(...products.map(p => p.id)) + 1,
+        name,
+        price: parseFloat(price),
+        stock: parseInt(stock),
+        barcode,
+        category
+      }
+      
+      products.push(newProduct)
+      
+      return NextResponse.json({ 
+        success: true, 
+        product: newProduct,
+        message: 'Product created successfully' 
+      })
+    }
+
+    if (action === 'update') {
+      const { id, name, price, stock, barcode, category } = data
+      
+      const productIndex = products.findIndex(p => p.id === id)
+      if (productIndex === -1) {
+        return NextResponse.json(
+          { error: 'Product not found' },
+          { status: 404 }
+        )
+      }
+
+      products[productIndex] = {
+        ...products[productIndex],
+        name,
+        price: parseFloat(price),
+        stock: parseInt(stock),
+        barcode,
+        category
+      }
+
+      return NextResponse.json({ 
+        success: true, 
+        product: products[productIndex],
+        message: 'Product updated successfully' 
+      })
+    }
+
+    if (action === 'delete') {
+      const { id } = data
+      
+      const productIndex = products.findIndex(p => p.id === id)
+      if (productIndex === -1) {
+        return NextResponse.json(
+          { error: 'Product not found' },
+          { status: 404 }
+        )
+      }
+
+      products.splice(productIndex, 1)
+
+      return NextResponse.json({ 
+        success: true,
+        message: 'Product deleted successfully' 
+      })
+    }
+
+    if (action === 'update-stock') {
+      const { id, change } = data // change can be positive or negative
+      
+      const product = products.find(p => p.id === id)
+      if (!product) {
+        return NextResponse.json(
+          { error: 'Product not found' },
+          { status: 404 }
+        )
+      }
+
+      product.stock = Math.max(0, product.stock + change)
+
+      return NextResponse.json({ 
+        success: true, 
+        product,
+        message: 'Stock updated successfully' 
+      })
+    }
+
+    return NextResponse.json(
+      { error: 'Invalid action' },
+      { status: 400 }
+    )
+
+  } catch (error) {
+    console.error('Products API error:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+
