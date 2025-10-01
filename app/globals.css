@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* brand helpers */
+:root{
+  --brand-900:#1a1446; /* dark base */
+  --brand-700:#3b2db8; /* primary */
+  --brand-500:#6b5cff; /* accent */
+  --brand-100:#f0f0ff; /* light background */
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+  }
+}
+
+html {
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+html, body {
+  height: 100%;
+}
+
+/* Light theme (default) */
+.light {
+  color-scheme: light;
+}
+
+/* Dark theme */
+.dark {
+  color-scheme: dark;
+}
+
+/* Custom scrollbar for dark mode */
+.dark ::-webkit-scrollbar {
+  width: 8px;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 4px;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+/* Selection colors */
+::selection {
+  background: #6b5cff;
+  color: white;
+}
+
+.dark ::selection {
+  background: #6b5cff;
+  color: white;
+}

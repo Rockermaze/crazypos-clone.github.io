@@ -1,0 +1,56 @@
+{
+  "name": "crazypos-style",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "dev:win": "set NODE_OPTIONS=--max-old-space-size=4096 && next dev",
+    "build": "next build",
+    "build:clean": "rimraf .next && next build",
+    "reinstall-swc": "npm uninstall @next/swc-win32-x64-msvc && npm install @next/swc-win32-x64-msvc",
+    "start": "next start",
+    "lint": "eslint .",
+    "seed": "node scripts/seed-mongodb.js",
+    "seed:repair-categories": "node scripts/seed-repair-categories.js",
+    "cleanup-db": "node scripts/cleanup-db.js",
+    "clean": "rimraf .next && rimraf node_modules/.cache"
+  },
+  "dependencies": {
+    "@auth/core": "0.34.2",
+    "@paypal/checkout-server-sdk": "^1.0.3",
+    "@paypal/paypal-server-sdk": "^1.1.0",
+    "@paypal/react-paypal-js": "^8.9.1",
+    "bcryptjs": "^3.0.2",
+    "braintree": "^3.33.1",
+    "braintree-web-drop-in": "^1.45.1",
+    "clsx": "^2.1.1",
+    "crypto-js": "^4.2.0",
+    "dotenv": "^17.2.2",
+    "jspdf": "^3.0.3",
+    "jspdf-autotable": "^5.0.2",
+    "lucide-react": "^0.453.0",
+    "mongoose": "^8.18.0",
+    "next": "15.5.0",
+    "next-auth": "^4.24.7",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "uuid": "^13.0.0",
+    "vercel": "^32.0.1"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20.14.10",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.9.0",
+    "eslint-config-next": "15.5.0",
+    "postcss": "^8.4.45",
+    "tailwindcss": "^3.4.10",
+    "typescript": "^5.9.2"
+  }
+}

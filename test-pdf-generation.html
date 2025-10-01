@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YourPOS PDF Report Demo</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+            background: #f8fafc;
+        }
+        .demo-container {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+        .stat-box {
+            background: #f1f5f9;
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #1e293b;
+        }
+        .stat-label {
+            font-size: 0.875rem;
+            color: #64748b;
+            margin-top: 0.25rem;
+        }
+        .btn {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            margin: 0.5rem;
+        }
+        .btn:hover {
+            background: #2563eb;
+        }
+        .btn-secondary {
+            background: #6b7280;
+        }
+        .btn-secondary:hover {
+            background: #4b5563;
+        }
+        .preview {
+            background: #f8fafc;
+            border: 2px dashed #cbd5e1;
+            padding: 2rem;
+            border-radius: 8px;
+            margin: 2rem 0;
+            text-align: center;
+            color: #64748b;
+        }
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+        }
+        .table th,
+        .table td {
+            padding: 8px 12px;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        .table th {
+            background: #f1f5f9;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-container">
+        <div class="header">
+            <h1>📊 YourPOS Sales History Demo</h1>
+            <p>Interactive demonstration of the PDF report generation feature</p>
+        </div>
+
+        <div class="stats">
+            <div class="stat-box">
+                <div class="stat-value">3</div>
+                <div class="stat-label">Total Sales</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value">$4,426.40</div>
+                <div class="stat-label">Total Revenue</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value">$1,079.00</div>
+                <div class="stat-label">Net Profit</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value">24.4%</div>
+                <div class="stat-label">Profit Margin</div>
+            </div>
+        </div>
+
+        <h3>📋 Sample Sales Data</h3>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Receipt #</th>
+                    <th>Date</th>
+                    <th>Customer</th>
+                    <th>Total</th>
+                    <th>Profit</th>
+                    <th>Payment</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>R1001</td>
+                    <td>Dec 1, 2024</td>
+                    <td>John Smith</td>
+                    <td>$1,646.70</td>
+                    <td>$387.00</td>
+                    <td>CARD</td>
+                </tr>
+                <tr>
+                    <td>R1002</td>
+                    <td>Dec 1, 2024</td>
+                    <td>Sarah Johnson</td>
+                    <td>$1,428.90</td>
+                    <td>$349.00</td>
+                    <td>CASH</td>
+                </tr>
+                <tr>
+                    <td>R1003</td>
+                    <td>Dec 2, 2024</td>
+                    <td>Mike Wilson</td>
+                    <td>$1,350.80</td>
+                    <td>$343.00</td>
+                    <td>DIGITAL</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div style="text-align: center; margin: 2rem 0;">
+            <button class="btn" onclick="generatePDFReport()">📄 Download PDF Report</button>
+            <button class="btn btn-secondary" onclick="showPreview()">👁️ Preview Data</button>
+        </div>
+
+        <div class="preview" id="preview" style="display: none;">
+            <h4>📊 Report Preview Generated!</h4>
+            <p>In the actual YourPOS application, this would show:</p>
+            <ul style="text-align: left; display: inline-block;">
+                <li>Real-time financial summary</li>
+                <li>Detailed profit calculations</li>
+                <li>Tax analysis breakdown</li>
+                <li>Top-selling products</li>
+                <li>Customer insights</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // Sample data - matches your actual API response format
+        const sampleData = {
+            sales: [
+                {
+                    id: "674d1a2b3c4e5f6789012345",
+                    receiptNumber: "R1001",
+                    createdAt: "2024-12-01T10:30:00Z",
+                    items: [
+                        {
+                            productName: "iPhone 15 Pro",
+                            quantity: 1,
+                            totalPrice: 999.00,
+                            itemCost: 750.00,
+                            itemProfit: 249.00,
+                            profitMargin: 24.9
+                        },
+                        {
+                            productName: "AirPods Pro",
+                            quantity: 2,
+                            totalPrice: 498.00,
+                            itemCost: 360.00,
+                            itemProfit: 138.00,
+                            profitMargin: 27.7
+                        }
+                    ],
+                    subtotal: 1497.00,
+                    tax: 149.70,
+                    total: 1646.70,
+                    totalCost: 1110.00,
+                    totalProfit: 387.00,
+                    profitMargin: 23.5,
+                    paymentMethod: "card",
+                    customerInfo: {
+                        name: "John Smith",
+                        email: "john@email.com"
+                    }
+                },
+                {
+                    id: "674d1a2b3c4e5f6789012346",
+                    receiptNumber: "R1002",
+                    createdAt: "2024-12-01T14:45:00Z",
+                    items: [
+                        {
+                            productName: "MacBook Air M3",
+                            quantity: 1,
+                            totalPrice: 1299.00,
+                            itemCost: 950.00,
+                            itemProfit: 349.00,
+                            profitMargin: 26.9
+                        }
+                    ],
+                    subtotal: 1299.00,
+                    tax: 129.90,
+                    total: 1428.90,
+                    totalCost: 950.00,
+                    totalProfit: 349.00,
+                    profitMargin: 24.4,
+                    paymentMethod: "cash",
+                    customerInfo: {
+                        name: "Sarah Johnson"
+                    }
+                },
+                {
+                    id: "674d1a2b3c4e5f6789012347",
+                    receiptNumber: "R1003",
+                    createdAt: "2024-12-02T09:15:00Z",
+                    items: [
+                        {
+                            productName: "iPad Pro 12.9\"",
+                            quantity: 1,
+                            totalPrice: 1099.00,
+                            itemCost: 800.00,
+                            itemProfit: 299.00,
+                            profitMargin: 27.2
+                        },
+                        {
+                            productName: "Apple Pencil",
+                            quantity: 1,
+                            totalPrice: 129.00,
+                            itemCost: 85.00,
+                            itemProfit: 44.00,
+                            profitMargin: 34.1
+                        }
+                    ],
+                    subtotal: 1228.00,
+                    tax: 122.80,
+                    total: 1350.80,
+                    totalCost: 885.00,
+                    totalProfit: 343.00,
+                    profitMargin: 25.4,
+                    paymentMethod: "digital",
+                    customerInfo: {
+                        name: "Mike Wilson"
+                    }
+                }
+            ],
+            summary: {
+                totalSales: 3,
+                totalRevenue: 4426.40,
+                totalSubtotal: 4024.00,
+                totalTax: 402.40,
+                totalCost: 2945.00,
+                totalProfit: 1079.00,
+                averageOrderValue: 1475.47,
+                profitMargin: 24.4,
+                grossProfitMargin: 26.8
+            }
+        };
+
+        function showPreview() {
+            const preview = document.getElementById('preview');
+            preview.style.display = preview.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function generatePDFReport() {
+            try {
+                // Initialize jsPDF
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                
+                let yPosition = 20;
+
+                // Report Header
+                doc.setFontSize(20);
+                doc.setFont('helvetica', 'bold');
+                doc.text('Financial Report', 20, yPosition);
+                
+                doc.setFontSize(12);
+                doc.setFont('helvetica', 'normal');
+                yPosition += 10;
+                
+                doc.text('YourPOS Store', 20, yPosition);
+                yPosition += 7;
+                doc.text('Period: 2024-01-01 - 2024-12-31', 20, yPosition);
+                yPosition += 7;
+                doc.text(`Report Generated: ${new Date().toLocaleDateString()}`, 20, yPosition);
+                yPosition += 7;
+                doc.text(`Total Transactions: ${sampleData.summary.totalSales}`, 20, yPosition);
+                yPosition += 15;
+
+                // Summary Statistics Box
+                doc.setDrawColor(0, 0, 0);
+                doc.setLineWidth(0.5);
+                doc.rect(20, yPosition, 170, 35);
+                
+                doc.setFontSize(14);
+                doc.setFont('helvetica', 'bold');
+                doc.text('Financial Summary', 25, yPosition + 10);
+                
+                doc.setFontSize(11);
+                doc.setFont('helvetica', 'normal');
+                
+                // Left column - Primary Metrics
+                doc.text(`Total Revenue: $${sampleData.summary.totalRevenue.toFixed(2)}`, 25, yPosition + 20);
+                doc.text(`Cost of Goods: $${sampleData.summary.totalCost.toFixed(2)}`, 25, yPosition + 27);
+                doc.text(`Net Profit: $${sampleData.summary.totalProfit.toFixed(2)}`, 25, yPosition + 34);
+                
+                // Right column - Analysis
+                doc.text(`Net Margin: ${sampleData.summary.profitMargin.toFixed(1)}%`, 105, yPosition + 20);
+                doc.text(`Avg Order: $${sampleData.summary.averageOrderValue.toFixed(2)}`, 105, yPosition + 27);
+                doc.text(`Tax Collected: $${sampleData.summary.totalTax.toFixed(2)}`, 105, yPosition + 34);
+
+                yPosition += 50;
+
+                // Sales Table
+                doc.setFontSize(14);
+                doc.setFont('helvetica', 'bold');
+                doc.text('Sales Details', 20, yPosition);
+                yPosition += 10;
+
+                // Prepare table data
+                const tableData = sampleData.sales.map(sale => [
+                    sale.receiptNumber,
+                    new Date(sale.createdAt).toLocaleDateString(),
+                    new Date(sale.createdAt).toLocaleTimeString(),
+                    `$${sale.total.toFixed(2)}`,
+                    `$${sale.totalCost.toFixed(2)}`,
+                    `$${sale.totalProfit.toFixed(2)}`,
+                    `${sale.profitMargin.toFixed(1)}%`,
+                    sale.paymentMethod.toUpperCase()
+                ]);
+
+                // Add table using autoTable
+                doc.autoTable({
+                    startY: yPosition,
+                    head: [['Receipt #', 'Date', 'Time', 'Total', 'Cost', 'Profit', 'Margin %', 'Payment']],
+                    body: tableData,
+                    styles: {
+                        fontSize: 9,
+                        cellPadding: 2
+                    },
+                    headStyles: {
+                        fillColor: [63, 63, 70],
+                        textColor: [255, 255, 255],
+                        fontStyle: 'bold'
+                    },
+                    alternateRowStyles: {
+                        fillColor: [248, 250, 252]
+                    },
+                    columnStyles: {
+                        0: { cellWidth: 25 },
+                        1: { cellWidth: 22 },
+                        2: { cellWidth: 20 },
+                        3: { cellWidth: 20, halign: 'right' },
+                        4: { cellWidth: 20, halign: 'right' },
+                        5: { cellWidth: 20, halign: 'right' },
+                        6: { cellWidth: 18, halign: 'right' },
+                        7: { cellWidth: 20 }
+                    }
+                });
+
+                // Footer
+                const pageCount = doc.internal.getNumberOfPages();
+                for (let i = 1; i <= pageCount; i++) {
+                    doc.setPage(i);
+                    doc.setFontSize(8);
+                    doc.text(
+                        `YourPOS - Page ${i} of ${pageCount} - Generated on ${new Date().toLocaleDateString()}`,
+                        20,
+                        doc.internal.pageSize.height - 10
+                    );
+                }
+
+                // Download the PDF
+                const filename = `Financial_Report_${new Date().toISOString().split('T')[0]}.pdf`;
+                doc.save(filename);
+                
+                // Show success message
+                alert('✅ PDF Report Generated Successfully!\n\nFeatures demonstrated:\n• Professional formatting\n• Financial summary\n• Detailed sales table\n• Profit calculations\n• Multi-page support\n• Branded headers/footers');
+                
+            } catch (error) {
+                console.error('Error generating PDF:', error);
+                alert('❌ Error generating PDF. Please check the console for details.');
+            }
+        }
+    </script>
+</body>
+</html>
