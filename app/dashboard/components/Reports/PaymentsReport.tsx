@@ -129,7 +129,6 @@ export function PaymentsReport({ sales }: PaymentsReportProps) {
       'CASH': { method: 'Cash', total: 0, count: 0, netAmount: 0, fees: 0 },
       'CREDIT_CARD': { method: 'Credit Card', total: 0, count: 0, netAmount: 0, fees: 0 },
       'DEBIT_CARD': { method: 'Debit Card', total: 0, count: 0, netAmount: 0, fees: 0 },
-      'PAYPAL': { method: 'PayPal', total: 0, count: 0, netAmount: 0, fees: 0 },
       'BANK_TRANSFER': { method: 'Bank Transfer', total: 0, count: 0, netAmount: 0, fees: 0 },
       'STORE_CREDIT': { method: 'Store Credit', total: 0, count: 0, netAmount: 0, fees: 0 },
       'SQUARE': { method: 'Square', total: 0, count: 0, netAmount: 0, fees: 0 },
@@ -151,7 +150,7 @@ export function PaymentsReport({ sales }: PaymentsReportProps) {
       const methodMap: Record<string, string> = {
         'CASH': 'CASH',
         'CARD': 'CREDIT_CARD',
-        'ONLINE': 'PAYPAL',
+'ONLINE': 'ONLINE',
         'TRANSFER': 'BANK_TRANSFER',
         'STORE CREDIT': 'STORE_CREDIT',
         'SQUARE': 'SQUARE'
@@ -434,9 +433,6 @@ export function PaymentsReport({ sales }: PaymentsReportProps) {
                   <div className="text-sm font-medium text-slate-600 dark:text-slate-400">
                     {method.method}
                   </div>
-                  {method.method === 'PayPal' && (
-                    <div className="text-blue-500 text-lg">🅿️</div>
-                  )}
                 </div>
                 <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">
                   {formatCurrency(method.total)}
@@ -458,44 +454,6 @@ export function PaymentsReport({ sales }: PaymentsReportProps) {
             ))}
           </div>
 
-          {/* PayPal Specific Analytics */}
-          {paymentMethodTotals.find(m => m.method === 'PayPal') && (
-            <div className="bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 rounded-xl p-6 border border-blue-200 dark:border-blue-800 mb-8">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="text-2xl">🅿️</div>
-                <h3 className="text-lg font-semibold text-blue-900 dark:text-blue-100">PayPal Integration Analytics</h3>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {(() => {
-                  const paypalStats = paymentMethodTotals.find(m => m.method === 'PayPal')
-                  if (!paypalStats) return null
-                  
-                  return (
-                    <>
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">
-                          {formatCurrency(paypalStats.total)}
-                        </div>
-                        <div className="text-sm text-blue-600 dark:text-blue-400">Total PayPal Revenue</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-green-700 dark:text-green-300">
-                          {formatCurrency(paypalStats.netAmount || paypalStats.total)}
-                        </div>
-                        <div className="text-sm text-green-600 dark:text-green-400">Net After Fees</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-orange-700 dark:text-orange-300">
-                          {formatCurrency(paypalStats.fees || 0)}
-                        </div>
-                        <div className="text-sm text-orange-600 dark:text-orange-400">PayPal Fees</div>
-                      </div>
-                    </>
-                  )
-                })()}
-              </div>
-            </div>
-          )}
         </>
       )}
 

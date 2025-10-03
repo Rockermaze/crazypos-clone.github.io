@@ -8,20 +8,6 @@ const transactionSchema = new mongoose.Schema({
     trim: true
   },
   
-  // PayPal specific fields
-  paypalOrderId: {
-    type: String,
-    trim: true
-  },
-  paypalCaptureId: {
-    type: String,
-    trim: true
-  },
-  paypalPaymentId: {
-    type: String,
-    trim: true,
-    index: true
-  },
   
   // User and business references
   userId: {
@@ -72,15 +58,34 @@ const transactionSchema = new mongoose.Schema({
   paymentMethod: {
     type: String,
     required: [true, 'Payment method is required'],
-    enum: ['PAYPAL', 'CREDIT_CARD', 'DEBIT_CARD', 'BANK_TRANSFER', 'CASH', 'CHECK'],
+    enum: ['CASH', 'ONLINE', 'DEBIT_CARD', 'CREDIT_CARD', 'STORE_CREDIT', 'STRIPE'],
     uppercase: true,
     index: true
   },
   paymentGateway: {
     type: String,
-    enum: ['PAYPAL', 'STRIPE', 'SQUARE', 'MANUAL', 'BRAINTREE'],
-    default: 'PAYPAL',
+    enum: ['STRIPE', 'SQUARE', 'MANUAL'],
+    default: 'MANUAL',
     uppercase: true
+  },
+  // Stripe-specific fields
+  stripePaymentIntentId: {
+    type: String,
+    sparse: true,
+    index: true
+  },
+  stripeAccountId: {
+    type: String,
+    index: true // The connected account that received the payment
+  },
+  applicationFeeAmount: {
+    type: Number,
+    min: [0, 'Application fee cannot be negative'],
+    default: 0
+  },
+  transferAmount: {
+    type: Number,
+    min: [0, 'Transfer amount cannot be negative']
   },
   
   // Transaction description and notes
@@ -140,40 +145,6 @@ const transactionSchema = new mongoose.Schema({
     }
   },
   
-  // PayPal specific response data
-  paypalData: {
-    intent: String,
-    status: String,
-    purchase_units: [{
-      reference_id: String,
-      amount: {
-        currency_code: String,
-        value: String
-      },
-      payee: {
-        email_address: String,
-        merchant_id: String
-      }
-    }],
-    payer: {
-      name: {
-        given_name: String,
-        surname: String
-      },
-      email_address: String,
-      payer_id: String,
-      address: {
-        country_code: String
-      }
-    },
-    create_time: Date,
-    update_time: Date,
-    links: [{
-      href: String,
-      rel: String,
-      method: String
-    }]
-  },
   
   // Refund information
   refund: {
@@ -220,8 +191,6 @@ transactionSchema.index({ userId: 1, status: 1 })
 transactionSchema.index({ userId: 1, type: 1 })
 transactionSchema.index({ userId: 1, paymentMethod: 1 })
 transactionSchema.index({ userId: 1, createdAt: -1 })
-transactionSchema.index({ paypalOrderId: 1 })
-transactionSchema.index({ paypalCaptureId: 1 })
 transactionSchema.index({ transactionId: 1 }, { unique: true })
 
 // Compound index for reporting
@@ -353,7 +322,6 @@ transactionSchema.methods.toAPIResponse = function() {
     fee: transaction.fee,
     createdAt: transaction.createdAt,
     processedAt: transaction.processedAt,
-    paypalOrderId: transaction.paypalOrderId,
     saleId: transaction.saleId
   }
 }

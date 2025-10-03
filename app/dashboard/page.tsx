@@ -11,6 +11,9 @@ import { APIDataManager } from '@/lib/apiDataManager'
 import { Product, Sale, StoreSettings, SaleItem } from '@/types'
 import type { RepairTicket } from '@/types/repair'
 import { DashboardHeader } from '@/components/DashboardHeader'
+import DashboardOnboarding from '@/components/DashboardOnboarding'
+import { CompanyInformationModal } from '@/components/onboarding/CompanyInformationModal'
+import { PaymentSettingsModal } from '@/components/onboarding/PaymentSettingsModal'
 
 // Import modular components
 import { SalesSection } from './components/Sales/SalesSection'
@@ -19,18 +22,25 @@ import { SalesHistorySection } from './components/SalesHistory/SalesHistorySecti
 import { RepairsSection } from './components/Repairs/RepairsSection'
 import { ReportsSection } from './components/Reports/ReportsSection'
 import { SettingsSection } from './components/Settings/SettingsSection'
+import { PaymentDashboard } from '@/components/PaymentDashboard'
 
 export default function DashboardPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
   
   // State management - Initialize all hooks at the top level
-  const [activeTab, setActiveTab] = useState('sales')
+  const [activeTab, setActiveTab] = useState('dashboard')
   const [products, setProducts] = useState<Product[]>([])
   const [sales, setSales] = useState<Sale[]>([])
   const [repairs, setRepairs] = useState<RepairTicket[]>([])
   const [settings, setSettings] = useState<StoreSettings | null>(null)
   const [cart, setCart] = useState<SaleItem[]>([])
+  
+  // Onboarding state
+  const [showOnboarding, setShowOnboarding] = useState(false)
+  const [showPOS, setShowPOS] = useState(false)
+  const [onboardingStatus, setOnboardingStatus] = useState(null)
+  const [activeOnboardingModal, setActiveOnboardingModal] = useState<string | null>(null)
   
   // Modal states
   const [showProductModal, setShowProductModal] = useState(false)
@@ -57,14 +67,32 @@ export default function DashboardPage() {
     const loadData = async () => {
       if (status === 'authenticated') {
         try {
-          const [productsData, salesData, repairsData] = await Promise.all([
-            APIDataManager.getProducts(),
-            APIDataManager.getSales(),
-            APIDataManager.getRepairs()
-          ])
-          setProducts(productsData)
-          setSales(salesData)
-          setRepairs(repairsData)
+          // Check onboarding status first
+          const onboardingResponse = await fetch('/api/onboarding')
+          if (onboardingResponse.ok) {
+            const onboardingData = await onboardingResponse.json()
+            setOnboardingStatus(onboardingData.onboardingStatus)
+            
+            // Show onboarding if not completed and not skipped
+            const shouldShowOnboarding = !onboardingData.onboardingStatus.completed && 
+                                       !onboardingData.onboardingStatus.skipped
+            setShowOnboarding(shouldShowOnboarding)
+            
+            // Show POS if onboarding is completed/skipped or user explicitly requested it
+            setShowPOS(onboardingData.onboardingStatus.completed || onboardingData.onboardingStatus.skipped)
+          }
+          
+          // Load main data (if showing POS or onboarding is completed)
+          if (showPOS || onboardingData.onboardingStatus.completed || onboardingData.onboardingStatus.skipped) {
+            const [productsData, salesData, repairsData] = await Promise.all([
+              APIDataManager.getProducts(),
+              APIDataManager.getSales(),
+              APIDataManager.getRepairs()
+            ])
+            setProducts(productsData)
+            setSales(salesData)
+            setRepairs(repairsData)
+          }
         } catch (error) {
           console.error('Error loading data:', error)
           setNotification({ message: 'Failed to load data', type: 'error' })
@@ -77,7 +105,8 @@ export default function DashboardPage() {
     if (status !== 'loading') {
       loadData()
     }
-  }, [status])
+  }, [status, showPOS])
+
 
   // Clear notification effect
   useEffect(() => {
@@ -89,6 +118,51 @@ export default function DashboardPage() {
 
   const handleLogout = async () => {
     await signOut({ callbackUrl: '/' })
+  }
+
+  // Navigation handlers
+  const handleGoToPOS = async () => {
+    setShowPOS(true)
+    setShowOnboarding(false)
+    
+    // Load POS data if not already loaded
+    if (products.length === 0) {
+      try {
+        const [productsData, salesData, repairsData] = await Promise.all([
+          APIDataManager.getProducts(),
+          APIDataManager.getSales(),
+          APIDataManager.getRepairs()
+        ])
+        setProducts(productsData)
+        setSales(salesData)
+        setRepairs(repairsData)
+      } catch (error) {
+        console.error('Error loading POS data:', error)
+        setNotification({ message: 'Failed to load POS data', type: 'error' })
+      }
+    }
+  }
+
+  const handleBackToSetup = () => {
+    setShowPOS(false)
+    setShowOnboarding(true)
+  }
+
+  const handleOpenOnboardingTask = (taskId: string) => {
+    setActiveOnboardingModal(taskId)
+  }
+
+  const handleCloseOnboardingModal = () => {
+    setActiveOnboardingModal(null)
+  }
+
+  const handleOnboardingTaskComplete = () => {
+    setActiveOnboardingModal(null)
+    // Refresh onboarding status
+    fetch('/api/onboarding')
+      .then(res => res.json())
+      .then(data => setOnboardingStatus(data.onboardingStatus))
+      .catch(console.error)
   }
 
   // Early returns after all hooks are defined
@@ -106,6 +180,7 @@ export default function DashboardPage() {
   if (!session) {
     return null
   }
+
 
   const addToCart = (product: Product) => {
     setCart(prev => {
@@ -150,6 +225,24 @@ export default function DashboardPage() {
   }
 
   const total = cart.reduce((sum, item) => sum + item.totalPrice, 0)
+
+  // Dashboard summary metrics
+  const today = new Date()
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const weekStart = new Date(today.getTime() - (7 * 24 * 60 * 60 * 1000))
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
+
+  const todaysSales = sales.filter(sale => new Date(sale.createdAt) >= todayStart)
+  const weekSales = sales.filter(sale => new Date(sale.createdAt) >= weekStart)
+  const monthSales = sales.filter(sale => new Date(sale.createdAt) >= monthStart)
+
+  const todaysRevenue = todaysSales.reduce((sum, sale) => sum + sale.total, 0)
+  const weekRevenue = weekSales.reduce((sum, sale) => sum + sale.total, 0)
+  const monthRevenue = monthSales.reduce((sum, sale) => sum + sale.total, 0)
+
+  const lowStockItems = products.filter(p => p.stock < 10)
+  const outOfStockItems = products.filter(p => p.stock === 0)
+  const activeRepairsCount = repairs.filter(r => r.status === 'in-progress' || r.status === 'waiting-parts').length
 
   // Product management functions
   const handleAddProduct = () => {
@@ -285,7 +378,8 @@ export default function DashboardPage() {
 
 
   const tabs = [
-    { id: 'sales', label: 'Point of Sales', icon: '💰', description: 'Process transactions' },
+    { id: 'dashboard', label: 'Dashboard', icon: '🏠', description: 'Overview & setup' },
+    { id: 'pos', label: 'POS', icon: '💰', description: 'Process transactions' },
     { id: 'inventory', label: 'Inventory', icon: '📦', description: 'Manage products' },
     { id: 'history', label: 'Sales History', icon: '📋', description: 'View past sales' },
     { id: 'repairs', label: 'Repairs', icon: '🔧', description: 'Manage repairs' },
@@ -316,7 +410,17 @@ export default function DashboardPage() {
                   }`}
                 >
                   <span className="text-lg">{tab.icon}</span>
-                  {tab.label}
+                  <div className="flex-1 flex items-center justify-between">
+                    <span>{tab.label}</span>
+                    {tab.id === 'dashboard' && showOnboarding && onboardingStatus && (
+                      <div className="flex items-center gap-1">
+                        <div className="w-2 h-2 rounded-full bg-orange-400"></div>
+                        <span className="text-xs text-orange-600 dark:text-orange-400">
+                          {Object.values(onboardingStatus).filter(Boolean).length - 2}/7
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </button>
               ))}
             </div>
@@ -325,7 +429,53 @@ export default function DashboardPage() {
 
         {/* Main Content */}
         <main className="flex-1">
-          {activeTab === 'sales' && (
+          {activeTab === 'dashboard' && (
+            showOnboarding ? (
+              <DashboardOnboarding 
+                onOpenTask={handleOpenOnboardingTask}
+                onGoToPOS={handleGoToPOS}
+              />
+            ) : (
+              <div className="p-6">
+                <div className="grid gap-6 lg:grid-cols-2">
+                  <div className="bg-white dark:bg-slate-800 rounded-xl p-6 border border-slate-200 dark:border-slate-700">
+                    <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-4">Quick Summary</h2>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-600 dark:text-slate-300">Today's Revenue</span>
+                        <span className="font-bold text-brand-700 dark:text-brand-400">${todaysRevenue.toFixed(2)}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-600 dark:text-slate-300">This Week</span>
+                        <span className="font-bold text-slate-900 dark:text-slate-100">${weekRevenue.toFixed(2)}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-600 dark:text-slate-300">This Month</span>
+                        <span className="font-bold text-slate-900 dark:text-slate-100">${monthRevenue.toFixed(2)}</span>
+                      </div>
+                      <div className="pt-3 border-t border-slate-200 dark:border-slate-600">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-600 dark:text-slate-300">Low Stock Items</span>
+                          <span className="font-bold text-yellow-600 dark:text-yellow-400">{lowStockItems.length}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-600 dark:text-slate-300">Out of Stock</span>
+                          <span className="font-bold text-red-600 dark:text-red-400">{outOfStockItems.length}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-600 dark:text-slate-300">Active Repairs</span>
+                          <span className="font-bold text-blue-600 dark:text-blue-400">{activeRepairsCount}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <PaymentDashboard />
+                </div>
+              </div>
+            )
+          )}
+
+          {(activeTab === 'pos' && showPOS) && (
             <SalesSection 
               products={products}
               cart={cart}
@@ -338,7 +488,7 @@ export default function DashboardPage() {
             />
           )}
 
-          {activeTab === 'inventory' && (
+          {(activeTab === 'inventory' && showPOS) && (
             <InventorySection
               products={products}
               onAddProduct={handleAddProduct}
@@ -347,15 +497,15 @@ export default function DashboardPage() {
             />
           )}
 
-          {activeTab === 'history' && (
+          {(activeTab === 'history' && showPOS) && (
             <SalesHistorySection sales={sales} />
           )}
 
-          {activeTab === 'repairs' && (
+          {(activeTab === 'repairs' && showPOS) && (
             <RepairsSection repairs={repairs} onAddRepair={handleAddRepair} />
           )}
 
-          {activeTab === 'reports' && (
+          {(activeTab === 'reports' && showPOS) && (
             <ReportsSection products={products} sales={sales} repairs={repairs} />
           )}
 
@@ -371,6 +521,35 @@ export default function DashboardPage() {
                 });
               }}
             />
+          )}
+
+          {/* Show message when trying to access POS without completing setup */}
+          {!showPOS && activeTab !== 'dashboard' && activeTab !== 'settings' && showOnboarding && (
+            <div className="p-6">
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-6 text-center">
+                <div className="text-4xl mb-4">⚠️</div>
+                <h3 className="text-xl font-semibold text-yellow-900 dark:text-yellow-100 mb-2">
+                  Complete Setup First
+                </h3>
+                <p className="text-yellow-800 dark:text-yellow-200 mb-4">
+                  Please complete the required setup tasks before accessing POS features.
+                </p>
+                <div className="flex justify-center gap-3">
+                  <button
+                    onClick={() => setActiveTab('dashboard')}
+                    className="px-6 py-2 bg-yellow-600 hover:bg-yellow-500 text-white font-medium rounded-lg transition-colors"
+                  >
+                    Go to Dashboard
+                  </button>
+                  <button
+                    onClick={handleGoToPOS}
+                    className="px-6 py-2 border border-yellow-600 text-yellow-700 hover:bg-yellow-50 font-medium rounded-lg transition-colors"
+                  >
+                    Skip & Access POS
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
         </main>
       </div>
@@ -417,6 +596,56 @@ export default function DashboardPage() {
           onClose={() => setShowRepairModal(false)}
           onSave={handleSaveRepair}
         />
+      )}
+
+      {/* Onboarding Modals */}
+      {activeOnboardingModal === 'companyInformation' && (
+        <CompanyInformationModal
+          isOpen={true}
+          onClose={handleCloseOnboardingModal}
+          onComplete={handleOnboardingTaskComplete}
+        />
+      )}
+      
+      {activeOnboardingModal === 'paymentSettings' && (
+        <PaymentSettingsModal
+          isOpen={true}
+          onClose={handleCloseOnboardingModal}
+          onComplete={handleOnboardingTaskComplete}
+        />
+      )}
+      
+      {/* Placeholder modals for other tasks */}
+      {(activeOnboardingModal === 'storeInformation' || 
+        activeOnboardingModal === 'supplierConnection' ||
+        activeOnboardingModal === 'emailSettings' ||
+        activeOnboardingModal === 'printingSettings' ||
+        activeOnboardingModal === 'addProduct') && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-xl max-w-md mx-4">
+            <h3 className="text-lg font-semibold mb-4 capitalize">
+              {activeOnboardingModal?.replace(/([A-Z])/g, ' $1').trim()}
+            </h3>
+            <p className="text-slate-600 dark:text-slate-400 mb-4">
+              This setup task will be implemented with full functionality.
+              For now, you can mark it as complete to continue.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={handleCloseOnboardingModal}
+                className="px-4 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+              >
+                Close
+              </button>
+              <button
+                onClick={handleOnboardingTaskComplete}
+                className="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg transition-colors"
+              >
+                Mark Complete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Confirm Delete Dialog */}

@@ -108,7 +108,6 @@ export function PaymentDashboard({ className = '' }: PaymentDashboardProps) {
 
   const getPaymentMethodIcon = (method: string) => {
     switch (method.toLowerCase()) {
-      case 'paypal': return '🅿️'
       case 'cash': return '💵'
       case 'credit_card': return '💳'
       case 'debit_card': return '💳'

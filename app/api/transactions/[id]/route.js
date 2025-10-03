@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { connectDB } from '@/lib/mongodb'
 import Transaction from '@/models/Transaction'
-import { refundPayPalCapture } from '@/lib/paypal'
 
 /**
  * GET /api/transactions/[id]

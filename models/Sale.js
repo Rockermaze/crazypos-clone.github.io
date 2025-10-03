@@ -85,7 +85,7 @@ const saleSchema = new mongoose.Schema({
   },
   paymentMethod: {
     type: String,
-    enum: ['CASH', 'CREDIT_CARD', 'DEBIT_CARD', 'PAYPAL', 'BANK_TRANSFER', 'STORE_CREDIT', 'SQUARE', 'CHECK'],
+    enum: ['CASH', 'ONLINE', 'DEBIT_CARD', 'CREDIT_CARD', 'STORE_CREDIT'],
     required: [true, 'Payment method is required'],
     uppercase: true
   },
@@ -97,7 +97,7 @@ const saleSchema = new mongoose.Schema({
   },
   paymentGateway: {
     type: String,
-    enum: ['PAYPAL', 'STRIPE', 'SQUARE', 'MANUAL'],
+    enum: ['STRIPE', 'SQUARE', 'MANUAL'],
     uppercase: true
   },
   
@@ -111,15 +111,6 @@ const saleSchema = new mongoose.Schema({
     trim: true
   },
   
-  // PayPal specific fields
-  paypalOrderId: {
-    type: String,
-    trim: true
-  },
-  paypalCaptureId: {
-    type: String,
-    trim: true
-  },
   
   // Payment processing details
   paymentProcessedAt: {
@@ -186,8 +177,6 @@ saleSchema.index({ userId: 1, paymentStatus: 1 })
 saleSchema.index({ userId: 1, paymentMethod: 1 })
 saleSchema.index({ cashierId: 1, createdAt: -1 })
 saleSchema.index({ transactionId: 1 })
-saleSchema.index({ paypalOrderId: 1 })
-saleSchema.index({ paypalCaptureId: 1 })
 saleSchema.index({ externalTransactionId: 1 })
 
 // Compound indexes for complex queries
@@ -306,8 +295,6 @@ saleSchema.methods.toAPIResponse = function() {
     processingFee: sale.processingFee,
     customerInfo: sale.customerInfo,
     transactionId: sale.transactionId,
-    paypalOrderId: sale.paypalOrderId,
-    paypalCaptureId: sale.paypalCaptureId,
     createdAt: sale.createdAt,
     updatedAt: sale.updatedAt
   }

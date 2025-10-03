@@ -107,8 +107,6 @@ export async function GET(request) {
       fee: transaction.fee,
       createdAt: transaction.createdAt,
       processedAt: transaction.processedAt,
-      paypalOrderId: transaction.paypalOrderId,
-      paypalCaptureId: transaction.paypalCaptureId,
       saleId: transaction.saleId
     }))
 

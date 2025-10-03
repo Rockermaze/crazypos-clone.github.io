@@ -1,11 +1,17 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { loadStripe } from '@stripe/stripe-js'
+import {
+  Elements,
+  CardElement,
+  useStripe,
+  useElements
+} from '@stripe/react-stripe-js'
 import { Modal } from '@/components/Modal'
 import { SaleItem } from '@/types'
-import Script from 'next/script'
-import dynamic from 'next/dynamic'
 
-const BraintreeDropIn = dynamic(() => import('@/components/BraintreeDropIn'), { ssr: false })
+// Load Stripe
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
 
 interface PaymentModalProps {
   isOpen: boolean
@@ -20,12 +26,8 @@ export interface PaymentData {
   tax: number
   discount: number
   total: number
-  paymentMethod: 'CASH' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'PAYPAL' | 'BANK_TRANSFER' | 'STORE_CREDIT' | 'SQUARE' | 'CHECK'
-  paymentGateway?: 'PAYPAL' | 'STRIPE' | 'SQUARE' | 'MANUAL' | 'BRAINTREE'
-  braintreeData?: {
-    transactionId?: string
-    paymentInstrumentType?: string
-  }
+  paymentMethod: 'CASH' | 'ONLINE' | 'DEBIT_CARD' | 'CREDIT_CARD' | 'STORE_CREDIT' | 'STRIPE'
+  paymentGateway?: 'MANUAL' | 'STRIPE'
   amountPaid: number
   change: number
   customerInfo?: {
@@ -33,22 +35,116 @@ export interface PaymentData {
     email?: string
     phone?: string
   }
-  paypalData?: {
-    orderId?: string
-    captureId?: string
+  stripeData?: {
+    paymentIntentId?: string
     transactionId?: string
   }
 }
 
-// PayPal types
-declare global {
-  interface Window {
-    paypal?: any
+
+// Stripe Payment Component
+function StripePaymentForm({ finalTotal, customerInfo, onPaymentSuccess, onPaymentError }: {
+  finalTotal: number
+  customerInfo: any
+  onPaymentSuccess: (paymentIntentId: string) => void
+  onPaymentError: (error: string) => void
+}) {
+  const stripe = useStripe()
+  const elements = useElements()
+  const [processing, setProcessing] = useState(false)
+
+  const handleStripePayment = async () => {
+    if (!stripe || !elements) {
+      onPaymentError('Stripe not loaded')
+      return
+    }
+
+    setProcessing(true)
+    
+    try {
+      // Create payment intent on your server
+      const response = await fetch('/api/stripe/pos-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: finalTotal,
+          currency: 'usd',
+          customerEmail: customerInfo.email,
+          customerName: customerInfo.name,
+          description: 'POS Transaction'
+        })
+      })
+
+      const { clientSecret, paymentIntentId } = await response.json()
+
+      if (!clientSecret) {
+        throw new Error('Failed to create payment intent')
+      }
+
+      // Confirm payment with card
+      const cardElement = elements.getElement(CardElement)
+      if (!cardElement) {
+        throw new Error('Card element not found')
+      }
+
+      const { error, paymentIntent } = await stripe.confirmCardPayment(clientSecret, {
+        payment_method: {
+          card: cardElement,
+          billing_details: {
+            name: customerInfo.name || undefined,
+            email: customerInfo.email || undefined,
+          },
+        }
+      })
+
+      if (error) {
+        onPaymentError(error.message || 'Payment failed')
+      } else if (paymentIntent.status === 'succeeded') {
+        onPaymentSuccess(paymentIntent.id)
+      }
+    } catch (error: any) {
+      onPaymentError(error.message || 'Payment failed')
+    } finally {
+      setProcessing(false)
+    }
   }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+          Card Details
+        </label>
+        <div className="p-3 border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700">
+          <CardElement
+            options={{
+              style: {
+                base: {
+                  fontSize: '16px',
+                  color: '#424770',
+                  '::placeholder': {
+                    color: '#aab7c4',
+                  },
+                },
+              },
+            }}
+          />
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={handleStripePayment}
+        disabled={!stripe || processing}
+        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+      >
+        {processing ? 'Processing...' : `Pay $${finalTotal.toFixed(2)} with Card`}
+      </button>
+    </div>
+  )
 }
 
 export function PaymentModal({ isOpen, onClose, onPaymentComplete, cartItems, total }: PaymentModalProps) {
-  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'PAYPAL' | 'BANK_TRANSFER' | 'STORE_CREDIT' | 'SQUARE' | 'CHECK' | 'BRAINTREE'>('CASH')
+  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'ONLINE' | 'DEBIT_CARD' | 'CREDIT_CARD' | 'STORE_CREDIT' | 'STRIPE'>('CASH')
   const [amountPaid, setAmountPaid] = useState(total)
   const [discount, setDiscount] = useState(0)
   const [customerInfo, setCustomerInfo] = useState({
@@ -56,13 +152,9 @@ export function PaymentModal({ isOpen, onClose, onPaymentComplete, cartItems, to
     email: '',
     phone: ''
   })
+  const [stripeError, setStripeError] = useState('')
+  const [stripeSuccess, setStripeSuccess] = useState('')
   
-  // PayPal state
-  const [paypalLoaded, setPaypalLoaded] = useState(false)
-  const [paypalProcessing, setPaypalProcessing] = useState(false)
-  const [paypalError, setPaypalError] = useState<string | null>(null)
-  const [currentPaypalOrder, setCurrentPaypalOrder] = useState<any>(null)
-
   const taxRate = 0.0825 // 8.25% - should come from settings
   const subtotal = total
   const discountAmount = (subtotal * discount) / 100
@@ -70,165 +162,36 @@ export function PaymentModal({ isOpen, onClose, onPaymentComplete, cartItems, to
   const finalTotal = subtotal - discountAmount + taxAmount
   const change = paymentMethod === 'CASH' ? Math.max(0, amountPaid - finalTotal) : 0
 
-  // PayPal setup effect
-  useEffect(() => {
-    if (isOpen && paymentMethod === 'PAYPAL' && window.paypal && !paypalLoaded) {
-      setPaypalLoaded(true)
-      renderPayPalButtons()
-    }
-  }, [isOpen, paymentMethod, paypalLoaded, finalTotal])
-
-  // Reset PayPal state when modal closes or payment method changes
-  useEffect(() => {
-    if (!isOpen || paymentMethod !== 'PAYPAL') {
-      setPaypalError(null)
-      setPaypalProcessing(false)
-      setCurrentPaypalOrder(null)
-      if (paymentMethod !== 'PAYPAL') {
-        setPaypalLoaded(false)
+  // Stripe payment handlers
+  const handleStripePaymentSuccess = (paymentIntentId: string) => {
+    setStripeSuccess('Payment successful!')
+    setStripeError('')
+    
+    const paymentData: PaymentData = {
+      subtotal,
+      tax: taxAmount,
+      discount: discountAmount,
+      total: finalTotal,
+      paymentMethod: 'STRIPE',
+      paymentGateway: 'STRIPE',
+      amountPaid: finalTotal,
+      change: 0,
+      customerInfo: customerInfo.name || customerInfo.email || customerInfo.phone ? customerInfo : undefined,
+      stripeData: {
+        paymentIntentId,
+        transactionId: paymentIntentId
       }
     }
-  }, [isOpen, paymentMethod])
 
-  // Create PayPal order
-  const createPayPalOrder = async () => {
-    try {
-      setPaypalError(null)
-      setPaypalProcessing(true)
-
-      const response = await fetch('/api/paypal/create-order', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          amount: finalTotal,
-          currency: 'USD',
-          description: `Purchase from YourPOS - ${cartItems.length} items`,
-          customer: {
-            name: customerInfo.name,
-            firstName: customerInfo.name?.split(' ')[0] || '',
-            lastName: customerInfo.name?.split(' ').slice(1).join(' ') || '',
-            email: customerInfo.email,
-            phone: customerInfo.phone
-          },
-          metadata: {
-            cartItems: cartItems.map(item => ({
-              productId: item.productId,
-              productName: item.productName,
-              quantity: item.quantity,
-              unitPrice: item.unitPrice
-            })),
-            subtotal,
-            tax: taxAmount,
-            discount: discountAmount
-          }
-        })
-      })
-
-      const data = await response.json()
-
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to create PayPal order')
-      }
-
-      setCurrentPaypalOrder(data.data)
-      return data.data.paypalOrderId
-
-    } catch (error: any) {
-      console.error('PayPal Create Order Error:', error)
-      setPaypalError(error.message || 'Failed to create PayPal order')
-      setPaypalProcessing(false)
-      throw error
-    }
+    onPaymentComplete(paymentData)
   }
 
-  // Capture PayPal order
-  const capturePayPalOrder = async (orderId: string) => {
-    try {
-      const response = await fetch('/api/paypal/capture-order', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          orderId,
-          transactionId: currentPaypalOrder?.transactionId
-        })
-      })
-
-      const data = await response.json()
-
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to capture PayPal payment')
-      }
-
-      // Complete the payment
-      const paymentData: PaymentData = {
-        subtotal,
-        tax: taxAmount,
-        discount: discountAmount,
-        total: finalTotal,
-        paymentMethod: 'PAYPAL',
-        paymentGateway: 'PAYPAL',
-        amountPaid: finalTotal,
-        change: 0,
-        customerInfo: customerInfo.name || customerInfo.email || customerInfo.phone ? customerInfo : undefined,
-        paypalData: {
-          orderId,
-          captureId: data.data.captureId,
-          transactionId: data.data.transactionId
-        }
-      }
-
-      onPaymentComplete(paymentData)
-
-    } catch (error: any) {
-      console.error('PayPal Capture Error:', error)
-      setPaypalError(error.message || 'Failed to capture PayPal payment')
-      setPaypalProcessing(false)
-    }
-  }
-
-  // Render PayPal buttons
-  const renderPayPalButtons = () => {
-    if (!window.paypal) return
-
-    const paypalContainer = document.getElementById('paypal-button-container')
-    if (!paypalContainer) return
-
-    // Clear existing buttons
-    paypalContainer.innerHTML = ''
-
-    window.paypal.Buttons({
-      style: {
-        layout: 'vertical',
-        color: 'blue',
-        shape: 'rect',
-        label: 'paypal',
-        height: 45
-      },
-      createOrder: createPayPalOrder,
-      onApprove: async (data: any) => {
-        await capturePayPalOrder(data.orderID)
-      },
-      onError: (err: any) => {
-        console.error('PayPal Button Error:', err)
-        setPaypalError('PayPal payment failed. Please try again.')
-        setPaypalProcessing(false)
-      },
-      onCancel: () => {
-        setPaypalProcessing(false)
-        setPaypalError('PayPal payment was cancelled')
-      }
-    }).render('#paypal-button-container')
+  const handleStripePaymentError = (error: string) => {
+    setStripeError(error)
+    setStripeSuccess('')
   }
 
   const handlePaymentComplete = () => {
-    if (paymentMethod === 'PAYPAL') {
-      // PayPal payments are handled by the PayPal buttons
-      return
-    }
 
     const paymentData: PaymentData = {
       subtotal,
@@ -236,7 +199,7 @@ export function PaymentModal({ isOpen, onClose, onPaymentComplete, cartItems, to
       discount: discountAmount,
       total: finalTotal,
       paymentMethod,
-      paymentGateway: paymentMethod === 'SQUARE' ? 'SQUARE' : 'MANUAL',
+      paymentGateway: 'MANUAL',
       amountPaid: paymentMethod === 'CASH' ? amountPaid : finalTotal,
       change,
       customerInfo: customerInfo.name || customerInfo.email || customerInfo.phone ? customerInfo : undefined
@@ -246,7 +209,6 @@ export function PaymentModal({ isOpen, onClose, onPaymentComplete, cartItems, to
   }
 
   const isValidPayment = (
-    paymentMethod === 'PAYPAL' || 
     paymentMethod !== 'CASH' || 
     amountPaid >= finalTotal
   )
@@ -293,14 +255,11 @@ export function PaymentModal({ isOpen, onClose, onPaymentComplete, cartItems, to
           <div className="grid grid-cols-3 gap-3">
             {[
               { value: 'CASH', label: 'Cash', icon: '💵' },
-              { value: 'CREDIT_CARD', label: 'Credit Card', icon: '💳' },
+              { value: 'STRIPE', label: 'Card (Stripe)', icon: '💳' },
+              { value: 'ONLINE', label: 'Online', icon: '🌐' },
               { value: 'DEBIT_CARD', label: 'Debit Card', icon: '💳' },
-              { value: 'PAYPAL', label: 'PayPal', icon: '🅿️' },
-              { value: 'BRAINTREE', label: 'Card/PayPal/Google Pay (Braintree)', icon: '🧩' },
-              { value: 'BANK_TRANSFER', label: 'Bank Transfer', icon: '🏦' },
-              { value: 'STORE_CREDIT', label: 'Store Credit', icon: '🎟️' },
-              { value: 'SQUARE', label: 'Square', icon: '⬜' },
-              { value: 'CHECK', label: 'Check', icon: '📝' }
+              { value: 'CREDIT_CARD', label: 'Credit Card', icon: '💳' },
+              { value: 'STORE_CREDIT', label: 'Shop Credits', icon: '🎫' }
             ].map(method => (
               <button
                 key={method.value}
@@ -366,72 +325,30 @@ export function PaymentModal({ isOpen, onClose, onPaymentComplete, cartItems, to
           </div>
         )}
 
-        {/* Braintree Payment */}
-        {paymentMethod === 'BRAINTREE' && (
+        {/* Stripe Payment */}
+        {paymentMethod === 'STRIPE' && (
           <div>
-            <div className="bg-slate-50 dark:bg-slate-700 rounded-xl p-4">
-              <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
-                Braintree Payment - ${finalTotal.toFixed(2)}
-              </h4>
-              <BraintreeDropIn
-                amount={finalTotal}
-                onPaid={(bt) => {
-                  const method: PaymentData['paymentMethod'] = bt.paymentInstrumentType?.includes('paypal') ? 'PAYPAL' : 'CREDIT_CARD'
-                  const paymentData: PaymentData = {
-                    subtotal,
-                    tax: taxAmount,
-                    discount: discountAmount,
-                    total: finalTotal,
-                    paymentMethod: method,
-                    paymentGateway: 'BRAINTREE',
-                    amountPaid: finalTotal,
-                    change: 0,
-                    customerInfo: customerInfo.name || customerInfo.email || customerInfo.phone ? customerInfo : undefined,
-                    braintreeData: {
-                      transactionId: bt.transactionId,
-                      paymentInstrumentType: bt.paymentInstrumentType,
-                    }
-                  }
-                  onPaymentComplete(paymentData)
-                }}
+            <Elements stripe={stripePromise}>
+              <StripePaymentForm 
+                finalTotal={finalTotal}
+                customerInfo={customerInfo}
+                onPaymentSuccess={handleStripePaymentSuccess}
+                onPaymentError={handleStripePaymentError}
               />
-              <p className="text-xs text-slate-500 dark:text-slate-400 text-center mt-2">
-                Pay securely with cards, PayPal, or Google Pay via Braintree.
-              </p>
-            </div>
+            </Elements>
+            {stripeError && (
+              <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                <p className="text-sm text-red-600 dark:text-red-400">{stripeError}</p>
+              </div>
+            )}
+            {stripeSuccess && (
+              <div className="mt-3 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                <p className="text-sm text-green-600 dark:text-green-400">{stripeSuccess}</p>
+              </div>
+            )}
           </div>
         )}
 
-        {/* PayPal Payment */}
-        {paymentMethod === 'PAYPAL' && (
-          <div>
-            <div className="bg-slate-50 dark:bg-slate-700 rounded-xl p-4">
-              <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
-                PayPal Payment - ${finalTotal.toFixed(2)}
-              </h4>
-              
-              {paypalError && (
-                <div className="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800">
-                  <p className="text-sm text-red-700 dark:text-red-400">{paypalError}</p>
-                </div>
-              )}
-              
-              {paypalProcessing && (
-                <div className="mb-4 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800">
-                  <p className="text-sm text-blue-700 dark:text-blue-400">Processing PayPal payment...</p>
-                </div>
-              )}
-              
-              <div className="mb-4">
-                <div id="paypal-button-container"></div>
-              </div>
-              
-              <p className="text-xs text-slate-500 dark:text-slate-400 text-center">
-                You will be redirected to PayPal to complete the payment securely.
-              </p>
-            </div>
-          </div>
-        )}
 
         {/* Customer Information (Optional) */}
         <div>
@@ -466,43 +383,23 @@ export function PaymentModal({ isOpen, onClose, onPaymentComplete, cartItems, to
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 rounded-xl border border-slate-300 dark:border-slate-600 px-4 py-2 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-50 dark:hover:bg-slate-700 bg-white dark:bg-slate-800"
+            className={`${paymentMethod === 'STRIPE' ? 'w-full' : 'flex-1'} rounded-xl border border-slate-300 dark:border-slate-600 px-4 py-2 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-50 dark:hover:bg-slate-700 bg-white dark:bg-slate-800`}
           >
             Cancel
           </button>
-          <button
-            type="button"
-            onClick={handlePaymentComplete}
-            disabled={!isValidPayment || paymentMethod === 'PAYPAL' || paymentMethod === 'BRAINTREE'}
-            className={`flex-1 rounded-xl px-4 py-2 font-medium transition-colors ${
-              paymentMethod === 'PAYPAL' 
-                ? 'bg-slate-300 dark:bg-slate-600 text-slate-500 dark:text-slate-400 cursor-not-allowed'
-                : 'bg-brand-700 hover:bg-brand-600 dark:bg-brand-600 dark:hover:bg-brand-500 text-white disabled:opacity-50 disabled:cursor-not-allowed'
-            }`}
-          >
-            {paymentMethod === 'PAYPAL' || paymentMethod === 'BRAINTREE' ? 'Use Payment Button Above' : 'Complete Payment'}
-          </button>
+          {paymentMethod !== 'STRIPE' && (
+            <button
+              type="button"
+              onClick={handlePaymentComplete}
+              disabled={!isValidPayment}
+              className="flex-1 rounded-xl px-4 py-2 font-medium transition-colors bg-brand-700 hover:bg-brand-600 dark:bg-brand-600 dark:hover:bg-brand-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Complete Payment
+            </button>
+          )}
         </div>
       </div>
       
-      {/* PayPal SDK Script (only load when needed) */}
-      {process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID && paymentMethod === 'PAYPAL' && (
-        <Script
-          src={`https://www.paypal.com/sdk/js?client-id=${process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID}&currency=USD`}
-          strategy="lazyOnload"
-          onLoad={() => {
-            console.log('PayPal SDK loaded')
-            if (paymentMethod === 'PAYPAL' && isOpen) {
-              setPaypalLoaded(true)
-              setTimeout(renderPayPalButtons, 100)
-            }
-          }}
-          onError={(e) => {
-            console.error('PayPal SDK failed to load', e)
-            setPaypalError('PayPal SDK failed to load. Please refresh the page and try again.')
-          }}
-        />
-      )}
     </Modal>
   )
 }

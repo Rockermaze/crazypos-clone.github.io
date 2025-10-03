@@ -26,6 +26,91 @@ const userSchema = new mongoose.Schema({
     required: [true, 'Business name is required'],
     trim: true,
     maxlength: [100, 'Business name cannot be more than 100 characters']
+  },
+  // Stripe Connect integration fields
+  stripeAccountId: {
+    type: String,
+    sparse: true, // Allow multiple null values but unique non-null values
+    index: true
+  },
+  stripeAccountStatus: {
+    type: String,
+    enum: ['not_created', 'pending', 'active', 'restricted', 'rejected'],
+    default: 'not_created',
+    index: true
+  },
+  stripeChargesEnabled: {
+    type: Boolean,
+    default: false
+  },
+  stripePayoutsEnabled: {
+    type: Boolean,
+    default: false
+  },
+  platformFeePercentage: {
+    type: Number,
+    min: [0, 'Platform fee cannot be negative'],
+    max: [10, 'Platform fee cannot exceed 10%'],
+    default: 1.5 // Default platform fee of 1.5%
+  },
+  // Business details for payments
+  businessDetails: {
+    country: {
+      type: String,
+      default: 'US'
+    },
+    currency: {
+      type: String,
+      default: 'usd',
+      lowercase: true
+    },
+    businessType: {
+      type: String,
+      enum: ['individual', 'company'],
+      default: 'individual'
+    },
+    mcc: {
+      type: String,
+      default: '5734' // Computer Software Stores
+    }
+  },
+  onboardingStatus: {
+    companyInformation: {
+      type: Boolean,
+      default: false
+    },
+    storeInformation: {
+      type: Boolean,
+      default: false
+    },
+    supplierConnection: {
+      type: Boolean,
+      default: false
+    },
+    emailSettings: {
+      type: Boolean,
+      default: false
+    },
+    paymentSettings: {
+      type: Boolean,
+      default: false
+    },
+    printingSettings: {
+      type: Boolean,
+      default: false
+    },
+    addProduct: {
+      type: Boolean,
+      default: false
+    },
+    completed: {
+      type: Boolean,
+      default: false
+    },
+    skipped: {
+      type: Boolean,
+      default: false
+    }
   }
 }, {
   timestamps: true
