@@ -71,16 +71,18 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const body = await request.json()
-    const {
-      items,
-      subtotal,
-      tax,
-      discount = 0,
-      total,
-      paymentMethod,
-      customerInfo
-    } = body
+  const body = await request.json()
+  const {
+    items,
+    subtotal,
+    tax,
+    discount = 0,
+    total,
+    paymentMethod,
+    paymentGateway,
+    customerInfo,
+    stripeData
+  } = body
 
     // Validate required fields
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -157,6 +159,9 @@ export async function POST(request) {
       discount: parseFloat(discount),
       total: parseFloat(total),
       paymentMethod,
+      paymentGateway: paymentGateway || (paymentMethod === 'STRIPE' ? 'STRIPE' : 'MANUAL'),
+      paymentStatus: paymentMethod === 'STRIPE' ? 'COMPLETED' : 'COMPLETED',
+      externalTransactionId: stripeData?.paymentIntentId || null,
       customerInfo,
       receiptNumber,
       cashierId: session.user.id,
@@ -165,52 +170,141 @@ export async function POST(request) {
 
     const savedSale = await newSale.save()
 
-    // For manual payments (e.g., CASH), create a corresponding Transaction record
+    // Create corresponding Transaction record for all payment methods
     try {
-      const manualMethods = new Set(['CASH', 'CREDIT_CARD', 'DEBIT_CARD', 'BANK_TRANSFER', 'CHECK'])
       const method = String(savedSale.paymentMethod || '').toUpperCase()
-
-      if (manualMethods.has(method)) {
-        const txnId = Transaction.generateTransactionId()
-        const description = `Sale ${savedSale.receiptNumber} - ${method} payment`
-
-        const transaction = new Transaction({
-          transactionId: txnId,
-          userId: session.user.id,
-          saleId: savedSale._id,
-          amount: savedSale.total,
-          currency: savedSale.currency || 'USD',
-          type: 'PAYMENT',
-          status: 'COMPLETED',
-          paymentMethod: method,
-          paymentGateway: 'MANUAL',
-          description,
-          notes: `Manual ${method} payment recorded for receipt ${savedSale.receiptNumber}`,
-          fee: { amount: 0, currency: savedSale.currency || 'USD', type: 'TRANSACTION_FEE' },
-          netAmount: savedSale.total,
-          customer: savedSale.customerInfo ? {
-            name: savedSale.customerInfo.name,
-            email: savedSale.customerInfo.email,
-            phone: savedSale.customerInfo.phone
-          } : {},
-          metadata: {
-            source: 'sales-api',
-            receiptNumber: savedSale.receiptNumber
-          },
-          processedAt: new Date(),
-          ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
-          userAgent: request.headers.get('user-agent')
+      
+      // Handle Stripe payments
+      if (method === 'STRIPE' && stripeData?.paymentIntentId) {
+        // Find existing transaction created by Stripe webhook
+        const existingTransaction = await Transaction.findOne({ 
+          stripePaymentIntentId: stripeData.paymentIntentId 
         })
+        
+        if (existingTransaction) {
+          // Update existing transaction with sale reference
+          existingTransaction.saleId = savedSale._id
+          existingTransaction.description = `Sale ${savedSale.receiptNumber} - Stripe payment`
+          existingTransaction.metadata = {
+            ...existingTransaction.metadata,
+            receiptNumber: savedSale.receiptNumber,
+            source: 'sales-api'
+          }
+          await existingTransaction.save()
+          
+          // Link sale to transaction
+          savedSale.transactionId = existingTransaction._id
+          await savedSale.save()
+        } else {
+          // Create new transaction for Stripe payment if webhook hasn't created one yet
+          const txnId = Transaction.generateTransactionId()
+          const description = `Sale ${savedSale.receiptNumber} - Stripe payment`
 
-        const savedTxn = await transaction.save()
+          // For Stripe payments created here, calculate platform fee
+          const platformFeeAmount = stripeData.platformFee || 0
+          const netAmount = savedSale.total - platformFeeAmount
+          
+          const transaction = new Transaction({
+            transactionId: txnId,
+            userId: session.user.id,
+            saleId: savedSale._id,
+            amount: savedSale.total,
+            currency: savedSale.currency || 'USD',
+            type: 'SALE',
+            status: 'COMPLETED',
+            paymentMethod: 'STRIPE',
+            paymentGateway: 'STRIPE',
+            stripePaymentIntentId: stripeData.paymentIntentId,
+            applicationFeeAmount: platformFeeAmount,
+            description,
+            fee: { amount: platformFeeAmount, currency: savedSale.currency || 'USD', type: 'PROCESSING_FEE' },
+            netAmount,
+            customer: savedSale.customerInfo ? {
+              name: savedSale.customerInfo.name,
+              email: savedSale.customerInfo.email,
+              phone: savedSale.customerInfo.phone
+            } : {},
+            metadata: {
+              source: 'sales-api',
+              receiptNumber: savedSale.receiptNumber,
+              paymentIntentId: stripeData.paymentIntentId
+            },
+            processedAt: new Date(),
+            ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
+            userAgent: request.headers.get('user-agent')
+          })
 
-        // Update sale with gateway and transaction reference
-        savedSale.paymentGateway = 'MANUAL'
-        savedSale.transactionId = savedTxn._id
-        if (savedSale.paymentStatus !== 'COMPLETED') {
-          savedSale.paymentStatus = 'COMPLETED'
+          const savedTxn = await transaction.save()
+          
+          // Update sale with transaction reference
+          savedSale.transactionId = savedTxn._id
+          await savedSale.save()
         }
-        await savedSale.save()
+      }
+      // Handle manual payments
+      else {
+        const manualMethods = new Set(['CASH', 'CREDIT_CARD', 'DEBIT_CARD', 'ONLINE', 'STORE_CREDIT'])
+
+        if (manualMethods.has(method)) {
+          const txnId = Transaction.generateTransactionId()
+          const description = `Sale ${savedSale.receiptNumber} - ${method} payment`
+          
+          // Calculate fees based on payment method
+          let feeAmount = 0
+          let feeType = 'TRANSACTION_FEE'
+          
+          // Apply standard fees for card payments (2.9% + $0.30)
+          if (method === 'CREDIT_CARD' || method === 'DEBIT_CARD') {
+            feeAmount = (savedSale.total * 0.029) + 0.30
+            feeType = 'PROCESSING_FEE'
+          }
+          // Online payments might have different fees (example: 3.5%)
+          else if (method === 'ONLINE') {
+            feeAmount = savedSale.total * 0.035
+            feeType = 'GATEWAY_FEE'
+          }
+          // CASH and STORE_CREDIT have no fees
+          
+          const netAmount = savedSale.total - feeAmount
+
+          const transaction = new Transaction({
+            transactionId: txnId,
+            userId: session.user.id,
+            saleId: savedSale._id,
+            amount: savedSale.total,
+            currency: savedSale.currency || 'USD',
+            type: 'SALE',
+            status: 'COMPLETED',
+            paymentMethod: method,
+            paymentGateway: 'MANUAL',
+            description,
+            notes: `Manual ${method} payment recorded for receipt ${savedSale.receiptNumber}`,
+            fee: { amount: feeAmount, currency: savedSale.currency || 'USD', type: feeType },
+            netAmount,
+            customer: savedSale.customerInfo ? {
+              name: savedSale.customerInfo.name,
+              email: savedSale.customerInfo.email,
+              phone: savedSale.customerInfo.phone
+            } : {},
+            metadata: {
+              source: 'sales-api',
+              receiptNumber: savedSale.receiptNumber
+            },
+            processedAt: new Date(),
+            ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
+            userAgent: request.headers.get('user-agent')
+          })
+
+          const savedTxn = await transaction.save()
+
+          // Update sale with gateway and transaction reference
+          savedSale.paymentGateway = 'MANUAL'
+          savedSale.transactionId = savedTxn._id
+          if (savedSale.paymentStatus !== 'COMPLETED') {
+            savedSale.paymentStatus = 'COMPLETED'
+          }
+          await savedSale.save()
+        }
       }
     } catch (txnErr) {
       console.error('Warning: Failed to create manual transaction for sale:', txnErr)

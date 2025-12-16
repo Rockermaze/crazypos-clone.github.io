@@ -13,7 +13,7 @@ import {
   CheckCircle,
   Clock,
   ExternalLink,
-  Refresh
+  RefreshCw
 } from 'lucide-react'
 
 interface StripeAccount {
@@ -154,7 +154,7 @@ export default function PaymentsDashboard() {
           disabled={loading}
           className="flex items-center gap-2"
         >
-          <Refresh className="w-4 h-4" />
+          <RefreshCw className="w-4 h-4" />
           Refresh
         </Button>
       </div>

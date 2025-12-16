@@ -7,12 +7,13 @@ import mongoose from 'mongoose'
 
 export async function PUT(request, { params }) {
   try {
+    // Await params in Next.js 16+
+    const { id } = await params
+    
     const session = await getServerSession(authOptions)
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-
-    const { id } = params
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return NextResponse.json({ error: 'Invalid category ID' }, { status: 400 })
     }
@@ -66,12 +67,13 @@ export async function PUT(request, { params }) {
 
 export async function DELETE(request, { params }) {
   try {
+    // Await params in Next.js 16+
+    const { id } = await params
+    
     const session = await getServerSession(authOptions)
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-
-    const { id } = params
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return NextResponse.json({ error: 'Invalid category ID' }, { status: 400 })
     }

@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
-import { authOptions } from '../../auth/[...nextauth]/route'
+import { authOptions } from '../../../../lib/auth'
 import User from '../../../../models/User'
-import { connectToDatabase } from '../../../../lib/mongodb'
+import { connectDB } from '../../../../lib/mongodb'
 import { createAccountLink } from '../../../../lib/stripe'
 
 // POST /api/stripe/onboard - Create onboarding link
@@ -14,7 +14,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
     }
 
-    await connectToDatabase()
+    await connectDB()
     
     const user = await User.findById(session.user.id)
     if (!user) {

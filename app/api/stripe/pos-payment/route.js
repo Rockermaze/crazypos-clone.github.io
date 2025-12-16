@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { stripe } from '../../../../lib/stripe'
+import { getStripe } from '../../../../lib/stripe'
 
 // POST /api/stripe/pos-payment - Create payment intent for POS transactions
 export async function POST(request) {
@@ -21,10 +21,9 @@ export async function POST(request) {
     }
 
     // Create payment intent directly (not using Connect since this is for your own account)
-    const paymentIntent = await stripe.paymentIntents.create({
+    const paymentIntent = await getStripe().paymentIntents.create({
       amount: Math.round(amount * 100), // Convert to cents
       currency: currency.toLowerCase(),
-      customer_email: customerEmail,
       description,
       metadata: {
         source: 'pos_system',

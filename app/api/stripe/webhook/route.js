@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server'
 import { headers } from 'next/headers'
-import { stripe } from '../../../../lib/stripe'
+import { getStripe } from '../../../../lib/stripe'
 import User from '../../../../models/User'
 import Transaction from '../../../../models/Transaction'
-import { connectToDatabase } from '../../../../lib/mongodb'
+import Sale from '../../../../models/Sale'
+import Counter from '../../../../models/Counter'
+import Product from '../../../../models/Product'
+import connectDB from '../../../../lib/mongodb'
 
 // This is your webhook secret for verifying the webhook signature
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
@@ -23,7 +26,7 @@ export async function POST(request) {
     
     try {
       // Verify webhook signature
-      event = stripe.webhooks.constructEvent(body, signature, webhookSecret)
+      event = getStripe().webhooks.constructEvent(body, signature, webhookSecret)
     } catch (err) {
       console.error('Webhook signature verification failed:', err.message)
       return NextResponse.json(
@@ -32,7 +35,7 @@ export async function POST(request) {
       )
     }
 
-    await connectToDatabase()
+    await connectDB()
 
     // Handle different event types
     switch (event.type) {
@@ -75,27 +78,158 @@ async function handlePaymentIntentSucceeded(paymentIntent) {
   try {
     console.log('Payment intent succeeded:', paymentIntent.id)
 
-    // Update transaction status
-    const transaction = await Transaction.findOne({ 
+    // Find existing transaction (created when PI was created)
+    let transaction = await Transaction.findOne({ 
       stripePaymentIntentId: paymentIntent.id 
     })
 
+    // If no transaction exists (edge case), create a minimal one so dashboards stay consistent
     if (!transaction) {
-      console.error('Transaction not found for payment intent:', paymentIntent.id)
-      return
+      console.warn('Transaction not found for payment intent, creating a minimal record:', paymentIntent.id)
+      const userId = paymentIntent.metadata?.shopkeeperId
+      if (!userId) {
+        console.error('Cannot infer userId from payment intent metadata; skipping transaction creation')
+        return
+      }
+      // Calculate fee from Stripe's application fee
+      const amount = (paymentIntent.amount_received || paymentIntent.amount) / 100
+      const applicationFee = paymentIntent.application_fee_amount ? paymentIntent.application_fee_amount / 100 : 0
+      
+      transaction = new Transaction({
+        transactionId: Transaction.generateTransactionId(),
+        userId,
+        saleId: null,
+        amount,
+        currency: (paymentIntent.currency || 'usd').toUpperCase(),
+        type: 'SALE',
+        status: 'PENDING',
+        paymentMethod: 'STRIPE',
+        paymentGateway: 'STRIPE',
+        stripePaymentIntentId: paymentIntent.id,
+        applicationFeeAmount: applicationFee,
+        description: paymentIntent.description || `Stripe payment ${paymentIntent.id}`,
+        customer: {
+          email: paymentIntent.receipt_email || '',
+          name: paymentIntent.metadata?.customerName || ''
+        },
+        fee: {
+          amount: applicationFee,
+          currency: (paymentIntent.currency || 'usd').toUpperCase(),
+          type: 'PROCESSING_FEE'
+        },
+        netAmount: amount - applicationFee,
+        metadata: {
+          paymentIntentId: paymentIntent.id,
+          source: 'stripe-webhook'
+        }
+      })
     }
 
+    // Update transaction status and stripe details
     transaction.status = 'COMPLETED'
     transaction.processedAt = new Date()
+    
+    // Preserve or calculate fee if not already set
+    if (!transaction.fee || transaction.fee.amount === 0) {
+      // If fee wasn't set, recalculate from applicationFeeAmount or default to 0
+      const feeAmount = transaction.applicationFeeAmount || 0
+      transaction.fee = {
+        amount: feeAmount,
+        currency: transaction.currency || 'USD',
+        type: 'PROCESSING_FEE'
+      }
+    }
+    
+    // Calculate accurate netAmount = amount - fee
+    transaction.netAmount = transaction.amount - (transaction.fee?.amount || 0)
+    
     transaction.metadata = {
       ...transaction.metadata,
       stripeChargeId: paymentIntent.latest_charge,
-      stripeReceiptUrl: paymentIntent.receipt_email,
+      // Note: receipt_email is an email address; receipt_url lives on the charge object
+      receiptEmail: paymentIntent.receipt_email,
       paymentMethod: paymentIntent.payment_method_types?.[0] || 'unknown'
     }
 
     await transaction.save()
     console.log('Transaction updated successfully:', transaction.transactionId)
+
+    // If no Sale is linked yet, create a Sale so it appears in Sales screens/reports
+    if (!transaction.saleId) {
+      const userId = transaction.userId
+
+      // Ensure a counter exists and increment receipt number
+      let counter = await Counter.findOne({ userId })
+      if (!counter) {
+        counter = new Counter({ userId, receiptNumber: 1000, ticketNumber: 1000, productId: 1000 })
+        await counter.save()
+      }
+      counter.receiptNumber += 1
+      await counter.save()
+      const receiptNumber = `R${counter.receiptNumber}`
+
+      // Find or create a non-inventory service product to attach the sale item to
+      let serviceProduct = await Product.findOne({ userId, barcode: 'DIRECT_PAYMENT' })
+      if (!serviceProduct) {
+        serviceProduct = await new Product({
+          userId,
+          name: 'Direct Payment',
+          price: 0,
+          cost: 0,
+          stock: 0,
+          barcode: 'DIRECT_PAYMENT',
+          category: 'Services',
+          description: 'Non-inventory direct payment recorded via Stripe',
+          isActive: true
+        }).save()
+      }
+
+      const amount = transaction.amount
+      const currency = transaction.currency || 'USD'
+
+      const sale = new Sale({
+        items: [{
+          productId: serviceProduct._id,
+          productName: serviceProduct.name,
+          quantity: 1,
+          unitPrice: amount,
+          totalPrice: amount,
+          discount: 0
+        }],
+        subtotal: amount,
+        tax: 0,
+        discount: 0,
+        total: amount,
+        paymentMethod: 'STRIPE',
+        paymentGateway: 'STRIPE',
+        paymentStatus: 'COMPLETED',
+        transactionId: transaction._id,
+        externalTransactionId: paymentIntent.id,
+        paymentProcessedAt: new Date(),
+        processingFee: {
+          amount: transaction.fee?.amount || 0,
+          currency
+        },
+        netAmount: transaction.netAmount || amount,
+        currency,
+        customerInfo: {
+          name: transaction.customer?.name || '',
+          email: transaction.customer?.email || '',
+          phone: transaction.customer?.phone || ''
+        },
+        receiptNumber,
+        cashierId: userId,
+        userId
+      })
+
+      const savedSale = await sale.save()
+
+      // Link the sale back to the transaction
+      transaction.saleId = savedSale._id
+      await transaction.save()
+
+      console.log('Sale created and linked for Stripe payment:', savedSale.receiptNumber)
+    }
 
   } catch (error) {
     console.error('Error handling payment intent succeeded:', error)

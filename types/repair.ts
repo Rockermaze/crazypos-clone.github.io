@@ -65,9 +65,11 @@ export interface RepairCategoriesSectionProps {
 export interface RepairTicketsSectionProps {
   repairs: RepairTicket[]
   onAddRepair: () => void
+  onUpdateRepairStatus: (repairId: string, status: RepairTicket['status'], additionalData?: Partial<RepairTicket>) => Promise<void>
 }
 
 export interface RepairsSectionProps {
   repairs: RepairTicket[]
   onAddRepair: () => void
+  onUpdateRepairStatus: (repairId: string, status: RepairTicket['status'], additionalData?: Partial<RepairTicket>) => Promise<void>
 }

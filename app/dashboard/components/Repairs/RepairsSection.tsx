@@ -4,7 +4,7 @@ import type { RepairTicket, RepairsSectionProps } from '@/types/repair'
 import { RepairCategoriesSection } from './RepairCategoriesSection'
 import { RepairTicketsSection } from './RepairTicketsSection'
 
-export function RepairsSection({ repairs, onAddRepair }: RepairsSectionProps) {
+export function RepairsSection({ repairs, onAddRepair, onUpdateRepairStatus }: RepairsSectionProps) {
   const [activeTab, setActiveTab] = useState('categories')
 
   const tabs = [
@@ -48,6 +48,7 @@ export function RepairsSection({ repairs, onAddRepair }: RepairsSectionProps) {
             <RepairTicketsSection 
               repairs={repairs}
               onAddRepair={onAddRepair}
+              onUpdateRepairStatus={onUpdateRepairStatus}
             />
           )}
         </div>

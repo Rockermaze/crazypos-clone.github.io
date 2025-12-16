@@ -217,13 +217,13 @@ export function PaymentDashboard({ className = '' }: PaymentDashboardProps) {
               <div>
                 <p className="text-blue-700 dark:text-blue-300 text-sm font-medium">Total Revenue</p>
                 <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">
-                  {stats.overall.formattedTotalAmount || formatCurrency(stats.overall.totalAmount)}
+                  {stats.overall.formattedTotalAmount || formatCurrency(stats.overall.totalAmount || 0)}
                 </p>
               </div>
               <div className="text-blue-500 text-2xl">💰</div>
             </div>
             <div className="text-xs text-blue-600 dark:text-blue-400 mt-2">
-              {stats.overall.transactionCount} transactions
+              {stats.overall.transactionCount || 0} transactions
             </div>
           </div>
 
@@ -232,7 +232,7 @@ export function PaymentDashboard({ className = '' }: PaymentDashboardProps) {
               <div>
                 <p className="text-green-700 dark:text-green-300 text-sm font-medium">Net Amount</p>
                 <p className="text-2xl font-bold text-green-900 dark:text-green-100">
-                  {stats.overall.formattedTotalNetAmount || formatCurrency(stats.overall.totalNetAmount)}
+                  {stats.overall.formattedTotalNetAmount || formatCurrency(stats.overall.totalNetAmount || 0)}
                 </p>
               </div>
               <div className="text-green-500 text-2xl">✅</div>
@@ -247,13 +247,15 @@ export function PaymentDashboard({ className = '' }: PaymentDashboardProps) {
               <div>
                 <p className="text-orange-700 dark:text-orange-300 text-sm font-medium">Processing Fees</p>
                 <p className="text-2xl font-bold text-orange-900 dark:text-orange-100">
-                  {formatCurrency(stats.overall.totalFees)}
+                  {formatCurrency(stats.overall.totalFees || 0)}
                 </p>
               </div>
               <div className="text-orange-500 text-2xl">📊</div>
             </div>
             <div className="text-xs text-orange-600 dark:text-orange-400 mt-2">
-              {((stats.overall.totalFees / stats.overall.totalAmount) * 100).toFixed(2)}% of total
+              {stats.overall.totalAmount > 0 
+                ? ((stats.overall.totalFees / stats.overall.totalAmount) * 100).toFixed(2) 
+                : '0.00'}% of total
             </div>
           </div>
 
@@ -262,7 +264,7 @@ export function PaymentDashboard({ className = '' }: PaymentDashboardProps) {
               <div>
                 <p className="text-purple-700 dark:text-purple-300 text-sm font-medium">Avg Transaction</p>
                 <p className="text-2xl font-bold text-purple-900 dark:text-purple-100">
-                  {stats.overall.formattedAverageAmount || formatCurrency(stats.overall.averageAmount)}
+                  {stats.overall.formattedAverageAmount || formatCurrency(stats.overall.averageAmount || 0)}
                 </p>
               </div>
               <div className="text-purple-500 text-2xl">📈</div>

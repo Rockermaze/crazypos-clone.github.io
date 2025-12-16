@@ -260,6 +260,26 @@ export default function DashboardPage() {
     setShowConfirmDialog(true)
   }
 
+  const handleToggleProductActive = async (product: Product) => {
+    try {
+      await APIDataManager.updateProduct(product.id, {
+        isActive: !product.isActive
+      })
+      const updatedProducts = await APIDataManager.getProducts()
+      setProducts(updatedProducts)
+      setNotification({ 
+        message: `Product ${!product.isActive ? 'activated' : 'deactivated'} successfully`, 
+        type: 'success' 
+      })
+    } catch (error) {
+      console.error('Error toggling product status:', error)
+      setNotification({ 
+        message: 'Failed to update product status', 
+        type: 'error' 
+      })
+    }
+  }
+
   const confirmDeleteProduct = async () => {
     if (productToDelete) {
       try {
@@ -371,6 +391,38 @@ export default function DashboardPage() {
       console.error('Error creating repair ticket:', error)
       setNotification({ 
         message: error.message || 'Failed to create repair ticket', 
+        type: 'error' 
+      })
+    }
+  }
+
+  const handleUpdateRepairStatus = async (repairId: string, status: RepairTicket['status'], additionalData?: Partial<RepairTicket>) => {
+    try {
+      const updateData = { status, ...additionalData }
+      await APIDataManager.updateRepair(repairId, updateData)
+      
+      // Refresh repairs list
+      const updatedRepairs = await APIDataManager.getRepairs()
+      setRepairs(updatedRepairs)
+      
+      // Show appropriate success message based on status
+      const statusMessages = {
+        'completed': 'Repair marked as completed! ✓',
+        'in-progress': 'Repair started and in progress',
+        'waiting-parts': 'Repair marked as waiting for parts',
+        'picked-up': 'Device marked as picked up! 📦',
+        'cancelled': 'Repair cancelled',
+        'pending': 'Repair status updated'
+      }
+      
+      setNotification({ 
+        message: statusMessages[status] || 'Repair status updated successfully', 
+        type: 'success' 
+      })
+    } catch (error: any) {
+      console.error('Error updating repair status:', error)
+      setNotification({ 
+        message: error.message || 'Failed to update repair status', 
         type: 'error' 
       })
     }
@@ -494,6 +546,7 @@ export default function DashboardPage() {
               onAddProduct={handleAddProduct}
               onEditProduct={handleEditProduct}
               onDeleteProduct={handleDeleteProduct}
+              onToggleActive={handleToggleProductActive}
             />
           )}
 
@@ -502,7 +555,11 @@ export default function DashboardPage() {
           )}
 
           {(activeTab === 'repairs' && showPOS) && (
-            <RepairsSection repairs={repairs} onAddRepair={handleAddRepair} />
+            <RepairsSection 
+              repairs={repairs} 
+              onAddRepair={handleAddRepair} 
+              onUpdateRepairStatus={handleUpdateRepairStatus} 
+            />
           )}
 
           {(activeTab === 'reports' && showPOS) && (

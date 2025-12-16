@@ -11,20 +11,23 @@ export async function GET(
   { params }
 ) {
   try {
+    // Await params in Next.js 16+
+    const { id } = await params
+    
     const session = await getServerSession(authOptions) // Fixed: Added authOptions
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     // Validate ObjectId format
-    if (!Types.ObjectId.isValid(params.id)) {
+    if (!Types.ObjectId.isValid(id)) {
       return NextResponse.json({ error: 'Invalid product ID' }, { status: 400 })
     }
 
     await connectDB()
     
     const product = await Product.findOne({ 
-      _id: params.id, 
+      _id: id, 
       userId: session.user.id 
     }).lean()
 
@@ -61,13 +64,16 @@ export async function PUT(
   { params }
 ) {
   try {
+    // Await params in Next.js 16+
+    const { id } = await params
+    
     const session = await getServerSession(authOptions) // Fixed: Added authOptions
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     // Validate ObjectId format
-    if (!Types.ObjectId.isValid(params.id)) {
+    if (!Types.ObjectId.isValid(id)) {
       return NextResponse.json({ error: 'Invalid product ID' }, { status: 400 })
     }
 
@@ -120,7 +126,7 @@ export async function PUT(
       const existingProduct = await Product.findOne({ 
         userId: session.user.id, 
         barcode: barcode.trim(),
-        _id: { $ne: params.id }
+        _id: { $ne: id }
       })
       
       if (existingProduct) {
@@ -147,7 +153,7 @@ export async function PUT(
     updateData.updatedAt = new Date()
 
     const updatedProduct = await Product.findOneAndUpdate(
-      { _id: params.id, userId: session.user.id },
+      { _id: id, userId: session.user.id },
       updateData,
       { new: true, runValidators: true }
     )
@@ -204,20 +210,23 @@ export async function DELETE(
   { params }
 ) {
   try {
+    // Await params in Next.js 16+
+    const { id } = await params
+    
     const session = await getServerSession(authOptions) // Fixed: Added authOptions
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     // Validate ObjectId format
-    if (!Types.ObjectId.isValid(params.id)) {
+    if (!Types.ObjectId.isValid(id)) {
       return NextResponse.json({ error: 'Invalid product ID' }, { status: 400 })
     }
 
     await connectDB()
 
     const deletedProduct = await Product.findOneAndDelete({ 
-      _id: params.id, 
+      _id: id, 
       userId: session.user.id 
     })
 
@@ -227,7 +236,7 @@ export async function DELETE(
 
     return NextResponse.json({ 
       message: 'Product deleted successfully',
-      productId: params.id 
+      productId: id 
     })
   } catch (error) {
     console.error('Error deleting product:', error)

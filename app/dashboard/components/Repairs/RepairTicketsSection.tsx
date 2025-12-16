@@ -1,7 +1,18 @@
 'use client'
+import { useState } from 'react'
 import type { RepairTicket, RepairTicketsSectionProps } from '@/types/repair'
 
-export function RepairTicketsSection({ repairs, onAddRepair }: RepairTicketsSectionProps) {
+export function RepairTicketsSection({ repairs, onAddRepair, onUpdateRepairStatus }: RepairTicketsSectionProps) {
+  const [updatingRepair, setUpdatingRepair] = useState<string | null>(null)
+
+  const handleStatusUpdate = async (repairId: string, status: RepairTicket['status']) => {
+    setUpdatingRepair(repairId)
+    try {
+      await onUpdateRepairStatus(repairId, status)
+    } finally {
+      setUpdatingRepair(null)
+    }
+  }
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -41,6 +52,7 @@ export function RepairTicketsSection({ repairs, onAddRepair }: RepairTicketsSect
                   <th className="text-left py-3 px-4 text-slate-900 dark:text-slate-100 font-semibold">Priority</th>
                   <th className="text-left py-3 px-4 text-slate-900 dark:text-slate-100 font-semibold">Est. Cost</th>
                   <th className="text-left py-3 px-4 text-slate-900 dark:text-slate-100 font-semibold">Date</th>
+                  <th className="text-left py-3 px-4 text-slate-900 dark:text-slate-100 font-semibold">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -110,6 +122,50 @@ export function RepairTicketsSection({ repairs, onAddRepair }: RepairTicketsSect
                           <div className="text-xs text-slate-500 dark:text-slate-400">
                             Est: {new Date(repair.estimatedCompletionDate).toLocaleDateString()}
                           </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="flex gap-2">
+                        {repair.status !== 'completed' && repair.status !== 'cancelled' && (
+                          <button
+                            onClick={() => handleStatusUpdate(repair.id, 'completed')}
+                            disabled={updatingRepair === repair.id}
+                            className="bg-green-100 hover:bg-green-200 disabled:bg-green-50 disabled:text-green-400 text-green-800 px-3 py-1 rounded-full text-xs font-medium transition-colors dark:bg-green-900/30 dark:hover:bg-green-900/50 dark:text-green-400 dark:disabled:bg-green-900/10 dark:disabled:text-green-600"
+                            title="Mark as Complete"
+                          >
+                            {updatingRepair === repair.id ? '⏳ ...' : '✓ Complete'}
+                          </button>
+                        )}
+                        {repair.status === 'pending' && (
+                          <button
+                            onClick={() => handleStatusUpdate(repair.id, 'in-progress')}
+                            disabled={updatingRepair === repair.id}
+                            className="bg-blue-100 hover:bg-blue-200 disabled:bg-blue-50 disabled:text-blue-400 text-blue-800 px-3 py-1 rounded-full text-xs font-medium transition-colors dark:bg-blue-900/30 dark:hover:bg-blue-900/50 dark:text-blue-400 dark:disabled:bg-blue-900/10 dark:disabled:text-blue-600"
+                            title="Start Repair"
+                          >
+                            {updatingRepair === repair.id ? '⏳ ...' : '▶ Start'}
+                          </button>
+                        )}
+                        {repair.status === 'in-progress' && (
+                          <button
+                            onClick={() => handleStatusUpdate(repair.id, 'waiting-parts')}
+                            disabled={updatingRepair === repair.id}
+                            className="bg-yellow-100 hover:bg-yellow-200 disabled:bg-yellow-50 disabled:text-yellow-400 text-yellow-800 px-3 py-1 rounded-full text-xs font-medium transition-colors dark:bg-yellow-900/30 dark:hover:bg-yellow-900/50 dark:text-yellow-400 dark:disabled:bg-yellow-900/10 dark:disabled:text-yellow-600"
+                            title="Waiting for Parts"
+                          >
+                            {updatingRepair === repair.id ? '⏳ ...' : '⏸ Parts'}
+                          </button>
+                        )}
+                        {repair.status === 'completed' && (
+                          <button
+                            onClick={() => handleStatusUpdate(repair.id, 'picked-up')}
+                            disabled={updatingRepair === repair.id}
+                            className="bg-purple-100 hover:bg-purple-200 disabled:bg-purple-50 disabled:text-purple-400 text-purple-800 px-3 py-1 rounded-full text-xs font-medium transition-colors dark:bg-purple-900/30 dark:hover:bg-purple-900/50 dark:text-purple-400 dark:disabled:bg-purple-900/10 dark:disabled:text-purple-600"
+                            title="Mark as Picked Up"
+                          >
+                            {updatingRepair === repair.id ? '⏳ ...' : '📦 Picked Up'}
+                          </button>
                         )}
                       </div>
                     </td>

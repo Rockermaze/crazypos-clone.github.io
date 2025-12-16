@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import { connectDB } from '@/lib/mongodb'
 import Transaction from '@/models/Transaction'
 
@@ -9,15 +10,16 @@ import Transaction from '@/models/Transaction'
  */
 export async function GET(request, { params }) {
   try {
-    const session = await getServerSession()
+    // Await params in Next.js 16+
+    const { id } = await params
+    
+    const session = await getServerSession(authOptions)
     if (!session?.user) {
       return NextResponse.json(
         { success: false, error: 'Authentication required' },
         { status: 401 }
       )
     }
-
-    const { id } = params
 
     if (!id) {
       return NextResponse.json(
@@ -72,15 +74,16 @@ export async function GET(request, { params }) {
  */
 export async function PUT(request, { params }) {
   try {
-    const session = await getServerSession()
+    // Await params in Next.js 16+
+    const { id } = await params
+    
+    const session = await getServerSession(authOptions)
     if (!session?.user) {
       return NextResponse.json(
         { success: false, error: 'Authentication required' },
         { status: 401 }
       )
     }
-
-    const { id } = params
     const body = await request.json()
 
     if (!id) {
@@ -157,15 +160,16 @@ export async function PUT(request, { params }) {
  */
 export async function DELETE(request, { params }) {
   try {
-    const session = await getServerSession()
+    // Await params in Next.js 16+
+    const { id } = await params
+    
+    const session = await getServerSession(authOptions)
     if (!session?.user) {
       return NextResponse.json(
         { success: false, error: 'Authentication required' },
         { status: 401 }
       )
     }
-
-    const { id } = params
 
     if (!id) {
       return NextResponse.json(

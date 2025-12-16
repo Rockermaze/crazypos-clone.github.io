@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import User from '../../../../models/User'
 import Transaction from '../../../../models/Transaction'
-import { connectToDatabase } from '../../../../lib/mongodb'
+import connectDB from '../../../../lib/mongodb'
 import { createPaymentIntent, calculatePlatformFee } from '../../../../lib/stripe'
 
 // POST /api/stripe/payment-intent - Create payment intent
@@ -32,7 +32,7 @@ export async function POST(request) {
       }, { status: 400 })
     }
 
-    await connectToDatabase()
+    await connectDB()
 
     // Get shopkeeper details
     const shopkeeper = await User.findById(shopkeeperId)
@@ -155,7 +155,7 @@ export async function GET(request) {
       return NextResponse.json({ error: 'Payment Intent ID is required' }, { status: 400 })
     }
 
-    await connectToDatabase()
+    await connectDB()
 
     // Find transaction by payment intent ID
     const transaction = await Transaction.findOne({ stripePaymentIntentId: paymentIntentId })

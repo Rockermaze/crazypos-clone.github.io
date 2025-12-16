@@ -140,15 +140,26 @@ export async function GET(request) {
     ])
 
     // Format the response
+    const overallData = overallStats[0] || {
+      totalAmount: 0,
+      totalNetAmount: 0,
+      totalFees: 0,
+      transactionCount: 0,
+      averageAmount: 0,
+      minAmount: 0,
+      maxAmount: 0
+    }
+    
+    // Ensure all values are numbers and handle null/undefined
     const statistics = {
-      overall: overallStats[0] || {
-        totalAmount: 0,
-        totalNetAmount: 0,
-        totalFees: 0,
-        transactionCount: 0,
-        averageAmount: 0,
-        minAmount: 0,
-        maxAmount: 0
+      overall: {
+        totalAmount: Number(overallData.totalAmount || 0),
+        totalNetAmount: Number(overallData.totalNetAmount || 0),
+        totalFees: Number(overallData.totalFees || 0),
+        transactionCount: Number(overallData.transactionCount || 0),
+        averageAmount: Number(overallData.averageAmount || 0),
+        minAmount: Number(overallData.minAmount || 0),
+        maxAmount: Number(overallData.maxAmount || 0)
       },
       statusBreakdown: statusBreakdown.map(item => ({
         status: item._id,
@@ -208,22 +219,42 @@ export async function GET(request) {
       }
     }
 
-    // Add formatted amounts to overall stats
-    if (statistics.overall.totalAmount) {
-      statistics.overall.formattedTotalAmount = new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD'
-      }).format(statistics.overall.totalAmount)
-      
+    // Add formatted amounts to overall stats (always format, even if 0)
+    statistics.overall.formattedTotalAmount = new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD'
+    }).format(statistics.overall.totalAmount)
+    
+    statistics.overall.formattedTotalNetAmount = new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD'
+    }).format(statistics.overall.totalNetAmount)
+    
+    statistics.overall.formattedAverageAmount = new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD'
+    }).format(statistics.overall.averageAmount)
+    
+    statistics.overall.formattedTotalFees = new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD'
+    }).format(statistics.overall.totalFees)
+    
+    // Verify calculation accuracy: totalNetAmount should equal totalAmount - totalFees
+    const calculatedNetAmount = statistics.overall.totalAmount - statistics.overall.totalFees
+    if (Math.abs(statistics.overall.totalNetAmount - calculatedNetAmount) > 0.01) {
+      console.warn('Net amount mismatch detected:', {
+        totalAmount: statistics.overall.totalAmount,
+        totalFees: statistics.overall.totalFees,
+        storedNetAmount: statistics.overall.totalNetAmount,
+        calculatedNetAmount
+      })
+      // Use calculated value as source of truth
+      statistics.overall.totalNetAmount = calculatedNetAmount
       statistics.overall.formattedTotalNetAmount = new Intl.NumberFormat('en-US', {
         style: 'currency',
         currency: 'USD'
-      }).format(statistics.overall.totalNetAmount)
-      
-      statistics.overall.formattedAverageAmount = new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD'
-      }).format(statistics.overall.averageAmount)
+      }).format(calculatedNetAmount)
     }
 
     return NextResponse.json({

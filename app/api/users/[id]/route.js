@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import User from '../../../../models/User'
-import { connectToDatabase } from '../../../../lib/mongodb'
+import connectDB from '../../../../lib/mongodb'
 
 // GET /api/users/[id] - Get user information for payments
 export async function GET(request, { params }) {
@@ -11,7 +11,7 @@ export async function GET(request, { params }) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 })
     }
 
-    await connectToDatabase()
+    await connectDB()
     
     const user = await User.findById(id).select([
       '_id',

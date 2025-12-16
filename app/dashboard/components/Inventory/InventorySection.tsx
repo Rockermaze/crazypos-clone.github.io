@@ -1,19 +1,30 @@
 'use client'
 import { Product } from '@/types'
+import { useState } from 'react'
 
 interface InventorySectionProps {
   products: Product[]
   onAddProduct: () => void
   onEditProduct: (product: Product) => void
   onDeleteProduct: (product: Product) => void
+  onToggleActive?: (product: Product) => void
 }
 
 export function InventorySection({
   products,
   onAddProduct,
   onEditProduct,
-  onDeleteProduct
+  onDeleteProduct,
+  onToggleActive
 }: InventorySectionProps) {
+  const [togglingProduct, setTogglingProduct] = useState<string | null>(null)
+
+  const handleToggleActive = async (product: Product) => {
+    if (!onToggleActive) return
+    setTogglingProduct(product.id)
+    await onToggleActive(product)
+    setTogglingProduct(null)
+  }
   return (
     <div className="p-6">
       <div className="bg-white dark:bg-slate-800 rounded-xl p-6">
@@ -36,6 +47,7 @@ export function InventorySection({
                 <th className="text-left py-3 px-4 text-slate-900 dark:text-slate-100">Stock</th>
                 <th className="text-left py-3 px-4 text-slate-900 dark:text-slate-100">Category</th>
                 <th className="text-left py-3 px-4 text-slate-900 dark:text-slate-100">Barcode</th>
+                <th className="text-left py-3 px-4 text-slate-900 dark:text-slate-100">Status</th>
                 <th className="text-left py-3 px-4 text-slate-900 dark:text-slate-100">Actions</th>
               </tr>
             </thead>
@@ -62,6 +74,19 @@ export function InventorySection({
                   </td>
                   <td className="py-3 px-4 text-slate-600 dark:text-slate-300">{product.category || 'Uncategorized'}</td>
                   <td className="py-3 px-4 text-slate-500 dark:text-slate-400 font-mono text-sm">{product.barcode}</td>
+                  <td className="py-3 px-4">
+                    <button
+                      onClick={() => handleToggleActive(product)}
+                      disabled={togglingProduct === product.id}
+                      className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                        product.isActive
+                          ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50'
+                          : 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-900/50'
+                      } ${togglingProduct === product.id ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      {togglingProduct === product.id ? '...' : (product.isActive ? 'Active' : 'Inactive')}
+                    </button>
+                  </td>
                   <td className="py-3 px-4">
                     <div className="flex gap-2">
                       <button 

@@ -20,10 +20,9 @@
     "clean": "rimraf .next && rimraf node_modules/.cache"
   },
   "dependencies": {
-    "@auth/core": "^0.40.0",
-    "@next/swc-win32-x64-msvc": "^15.5.4",
+    "@auth/core": "0.34.2",
     "@stripe/react-stripe-js": "^2.9.0",
-    "@stripe/stripe-js": "^8.0.0",
+    "@stripe/stripe-js": "^4.10.0",
     "bcryptjs": "^3.0.2",
     "clsx": "^2.1.1",
     "crypto-js": "^4.2.0",
@@ -32,8 +31,9 @@
     "jspdf-autotable": "^5.0.2",
     "lucide-react": "^0.453.0",
     "mongoose": "^8.18.0",
-    "next": "15.5.0",
+    "next": "^16.0.7",
     "next-auth": "^4.24.7",
+    "qrcode": "^1.5.4",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "stripe": "^19.0.0",
@@ -47,9 +47,12 @@
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.20",
     "eslint": "^9.9.0",
-    "eslint-config-next": "15.5.0",
+    "eslint-config-next": "15.5.4",
     "postcss": "^8.4.45",
     "tailwindcss": "^3.4.10",
     "typescript": "^5.9.2"
+  },
+  "optionalDependencies": {
+    "@next/swc-win32-x64-msvc": "^15.5.4"
   }
 }

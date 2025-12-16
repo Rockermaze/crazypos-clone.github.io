@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import { Card, CardHeader, CardContent, CardTitle } from '../../../components/ui/card'
 import { Button } from '../../../components/ui/button'
 import { Input } from '../../../components/ui/input'
@@ -13,7 +13,9 @@ import {
   AlertCircle,
   CheckCircle,
   User,
-  Mail
+  Mail,
+  Clock,
+  QrCode
 } from 'lucide-react'
 import { loadStripe } from '@stripe/stripe-js'
 import {
@@ -35,18 +37,59 @@ interface Shopkeeper {
 
 interface PaymentFormProps {
   shopkeeper: Shopkeeper
+  prefilledAmount?: string
+  prefilledDescription?: string
+  sessionId?: string
+  expiresAt?: string
 }
 
-function PaymentForm({ shopkeeper }: PaymentFormProps) {
+function PaymentForm({ shopkeeper, prefilledAmount, prefilledDescription, sessionId, expiresAt }: PaymentFormProps) {
   const stripe = useStripe()
   const elements = useElements()
-  const [amount, setAmount] = useState('')
+  const [amount, setAmount] = useState(prefilledAmount || '')
   const [customerEmail, setCustomerEmail] = useState('')
   const [customerName, setCustomerName] = useState('')
-  const [description, setDescription] = useState('')
+  const [description, setDescription] = useState(prefilledDescription || '')
   const [loading, setLoading] = useState(false)
   const [paymentStatus, setPaymentStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle')
   const [errorMessage, setErrorMessage] = useState('')
+  const [timeRemaining, setTimeRemaining] = useState<number | null>(null)
+  const [isExpired, setIsExpired] = useState(false)
+
+  // Timer effect for expiration
+  useEffect(() => {
+    if (!expiresAt) return
+
+    const expirationTime = new Date(expiresAt).getTime()
+    const now = Date.now()
+    
+    if (now >= expirationTime) {
+      setIsExpired(true)
+      return
+    }
+
+    const timer = setInterval(() => {
+      const currentTime = Date.now()
+      const remaining = expirationTime - currentTime
+      
+      if (remaining <= 0) {
+        setIsExpired(true)
+        setTimeRemaining(0)
+        clearInterval(timer)
+      } else {
+        setTimeRemaining(remaining)
+      }
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [expiresAt])
+
+  // Format time remaining
+  const formatTimeRemaining = (ms: number) => {
+    const minutes = Math.floor(ms / 60000)
+    const seconds = Math.floor((ms % 60000) / 1000)
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`
+  }
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -123,6 +166,23 @@ function PaymentForm({ shopkeeper }: PaymentFormProps) {
     }
   }
 
+  // Show expiration error
+  if (isExpired) {
+    return (
+      <Card className="text-center">
+        <CardContent className="p-8">
+          <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
+            <Clock className="w-8 h-8 text-red-600" />
+          </div>
+          <h2 className="text-xl font-bold mb-2">Payment Link Expired</h2>
+          <p className="text-gray-600 mb-4">
+            This payment link has expired. Please request a new payment link from the merchant.
+          </p>
+        </CardContent>
+      </Card>
+    )
+  }
+
   if (paymentStatus === 'success') {
     return (
       <Card className="text-center">
@@ -143,6 +203,25 @@ function PaymentForm({ shopkeeper }: PaymentFormProps) {
   }
 
   return (
+    <div className="space-y-6">
+      {/* QR Code Session Info */}
+      {sessionId && (
+        <Alert className="bg-blue-50 border-blue-200">
+          <QrCode className="h-4 w-4 text-blue-600" />
+          <AlertDescription className="text-blue-800">
+            <div className="flex items-center justify-between">
+              <span>Payment initiated via QR code</span>
+              {timeRemaining && timeRemaining > 0 && (
+                <span className="font-mono text-sm">
+                  <Clock className="w-3 h-3 inline mr-1" />
+                  {formatTimeRemaining(timeRemaining)}
+                </span>
+              )}
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
@@ -235,15 +314,25 @@ function PaymentForm({ shopkeeper }: PaymentFormProps) {
         <p>You will be charged ${((parseFloat(amount) || 0) + ((parseFloat(amount) || 0) * 0.029 + 0.30)).toFixed(2)} (includes Stripe fees)</p>
       </div>
     </form>
+    </div>
   )
 }
 
 export default function PaymentPage() {
   const params = useParams()
   const shopkeeperId = params.shopkeeperId as string
+  const searchParams = useSearchParams()
   const [shopkeeper, setShopkeeper] = useState<Shopkeeper | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+
+  // Extract QR params (if present)
+  const prefilledAmount = searchParams?.get('amount') || undefined
+  const prefilledDescription = searchParams?.get('description') || undefined
+  const sessionId = searchParams?.get('session') || undefined
+  const expires = searchParams?.get('expires') || undefined
+  // Convert epoch millis to ISO if provided
+  const expiresAt = expires ? new Date(Number(expires)).toISOString() : undefined
 
   useEffect(() => {
     fetchShopkeeper()
@@ -327,7 +416,13 @@ export default function PaymentPage() {
           </CardHeader>
           <CardContent>
             <Elements stripe={stripePromise}>
-              <PaymentForm shopkeeper={shopkeeper} />
+              <PaymentForm 
+                shopkeeper={shopkeeper}
+                prefilledAmount={prefilledAmount}
+                prefilledDescription={prefilledDescription}
+                sessionId={sessionId}
+                expiresAt={expiresAt}
+              />
             </Elements>
           </CardContent>
         </Card>

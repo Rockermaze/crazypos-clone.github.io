@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { useSession } from 'next-auth/react'
 import { loadStripe } from '@stripe/stripe-js'
 import {
   Elements,
@@ -144,6 +145,7 @@ function StripePaymentForm({ finalTotal, customerInfo, onPaymentSuccess, onPayme
 }
 
 export function PaymentModal({ isOpen, onClose, onPaymentComplete, cartItems, total }: PaymentModalProps) {
+  const { data: session } = useSession()
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'ONLINE' | 'DEBIT_CARD' | 'CREDIT_CARD' | 'STORE_CREDIT' | 'STRIPE'>('CASH')
   const [amountPaid, setAmountPaid] = useState(total)
   const [discount, setDiscount] = useState(0)
@@ -154,6 +156,16 @@ export function PaymentModal({ isOpen, onClose, onPaymentComplete, cartItems, to
   })
   const [stripeError, setStripeError] = useState('')
   const [stripeSuccess, setStripeSuccess] = useState('')
+  // QR state
+  const [qrLoading, setQrLoading] = useState(false)
+  const [qrError, setQrError] = useState('')
+  const [qrData, setQrData] = useState<null | {
+    qrCode: string
+    paymentUrl: string
+    sessionId: string
+    expiresAt: string
+  }>(null)
+  const [qrTimeRemaining, setQrTimeRemaining] = useState<number | null>(null)
   
   const taxRate = 0.0825 // 8.25% - should come from settings
   const subtotal = total
@@ -189,6 +201,71 @@ export function PaymentModal({ isOpen, onClose, onPaymentComplete, cartItems, to
   const handleStripePaymentError = (error: string) => {
     setStripeError(error)
     setStripeSuccess('')
+  }
+
+  // Generate QR Code for ONLINE method
+  const handleGenerateQRCode = async () => {
+    try {
+      setQrLoading(true)
+      setQrError('')
+      setQrData(null)
+
+      const shopkeeperId = (session?.user as any)?.id
+      if (!shopkeeperId) {
+        throw new Error('Unable to determine shopkeeper. Please re-login and try again.')
+      }
+
+      const response = await fetch('/api/payment/qr-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shopkeeperId,
+          amount: Number(finalTotal.toFixed(2)),
+          currency: 'usd',
+          description: 'POS Transaction',
+          expiresIn: 3600
+        })
+      })
+
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data?.error || 'Failed to generate QR code')
+      }
+
+      setQrData({
+        qrCode: data.qrCode,
+        paymentUrl: data.paymentUrl,
+        sessionId: data.sessionId,
+        expiresAt: data.expiresAt,
+      })
+
+    } catch (err: any) {
+      setQrError(err.message || 'Failed to generate QR code')
+    } finally {
+      setQrLoading(false)
+    }
+  }
+
+  // Countdown for QR expiration
+  useEffect(() => {
+    if (!qrData?.expiresAt) return
+
+    const expirationTime = new Date(qrData.expiresAt).getTime()
+    const tick = () => {
+      const now = Date.now()
+      const remaining = Math.max(0, expirationTime - now)
+      setQrTimeRemaining(remaining)
+    }
+
+    tick()
+    const timer = setInterval(tick, 1000)
+    return () => clearInterval(timer)
+  }, [qrData?.expiresAt])
+
+  const formatTimeRemaining = (ms: number) => {
+    const minutes = Math.floor(ms / 60000)
+    const seconds = Math.floor((ms % 60000) / 1000)
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`
   }
 
   const handlePaymentComplete = () => {
@@ -344,6 +421,65 @@ export function PaymentModal({ isOpen, onClose, onPaymentComplete, cartItems, to
             {stripeSuccess && (
               <div className="mt-3 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
                 <p className="text-sm text-green-600 dark:text-green-400">{stripeSuccess}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Online (QR Code) Payment */}
+        {paymentMethod === 'ONLINE' && (
+          <div className="space-y-4">
+            {!qrData && (
+              <div className="p-4 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800">
+                <p className="text-sm text-slate-700 dark:text-slate-300 mb-3">
+                  Generate a QR code for the customer to scan and pay ${finalTotal.toFixed(2)} on their phone.
+                </p>
+                {qrError && (
+                  <div className="mb-3 p-2 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-600 dark:text-red-400">
+                    {qrError}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={handleGenerateQRCode}
+                  disabled={qrLoading}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {qrLoading ? 'Generating...' : 'Generate QR Code'}
+                </button>
+              </div>
+            )}
+
+            {qrData && (
+              <div className="p-4 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800">
+                <div className="flex flex-col items-center gap-3">
+                  <img src={qrData.qrCode} alt="Payment QR Code" className="w-48 h-48" />
+                  <div className="text-sm text-slate-600 dark:text-slate-300">
+                    {qrTimeRemaining !== null && qrTimeRemaining > 0 ? (
+                      <span>Expires in {formatTimeRemaining(qrTimeRemaining)}</span>
+                    ) : (
+                      <span className="text-red-600 dark:text-red-400">QR code expired. Generate a new one.</span>
+                    )}
+                  </div>
+                  <div className="w-full">
+                    <label className="block text-xs text-slate-500 mb-1">Payment Link</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={qrData.paymentUrl}
+                        className="flex-1 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 px-3 py-2 text-xs"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => navigator.clipboard.writeText(qrData.paymentUrl)}
+                        className="px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>
