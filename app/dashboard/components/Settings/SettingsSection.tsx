@@ -1,35 +1,95 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { StoreSettings } from '@/types'
 
 interface SettingsSectionProps {
   settings: StoreSettings | null
   onSaveSettings?: (settings: Partial<StoreSettings>) => void
+  onNotification?: (message: string, type: 'success' | 'error' | 'warning') => void
 }
 
-export function SettingsSection({ settings, onSaveSettings }: SettingsSectionProps) {
+export function SettingsSection({ settings, onSaveSettings, onNotification }: SettingsSectionProps) {
   const [formData, setFormData] = useState({
     storeName: settings?.storeName || 'Your Store',
     storeAddress: settings?.storeAddress || '123 Main St, City, State 12345',
     storePhone: settings?.storePhone || '+1 (555) 123-4567',
     storeEmail: settings?.storeEmail || 'store@example.com',
     taxRate: settings?.taxRate || 8.25,
-    currency: settings?.currency || 'USD',
+    currency: settings?.currency || 'AUD',
     receiptFooter: settings?.receiptFooter || 'Thank you for your business!',
     lowStockThreshold: settings?.lowStockThreshold || 10
   })
 
   const [isEdited, setIsEdited] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [emailError, setEmailError] = useState('')
+
+  // Update form data when settings prop changes
+  useEffect(() => {
+    if (settings) {
+      setFormData({
+        storeName: settings.storeName || 'Your Store',
+        storeAddress: settings.storeAddress || '123 Main St, City, State 12345',
+        storePhone: settings.storePhone || '+1 (555) 123-4567',
+        storeEmail: settings.storeEmail || 'store@example.com',
+        taxRate: settings.taxRate || 8.25,
+        currency: settings.currency || 'AUD',
+        receiptFooter: settings.receiptFooter || 'Thank you for your business!',
+        lowStockThreshold: settings.lowStockThreshold || 10
+      })
+    }
+  }, [settings])
 
   const handleInputChange = (field: string, value: string | number) => {
     setFormData(prev => ({ ...prev, [field]: value }))
     setIsEdited(true)
   }
 
-  const handleSave = () => {
-    if (onSaveSettings) {
-      onSaveSettings(formData)
+  const handleSave = async () => {
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(formData.storeEmail)) {
+      setEmailError('Invalid email format')
+      if (onNotification) {
+        onNotification('Invalid email format. Please enter a valid email address.', 'error')
+      }
+      return
+    }
+    setEmailError('')
+
+    try {
+      setIsSaving(true)
+
+      // Save to database via API
+      const response = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to save settings')
+      }
+
+      // Call the onSaveSettings callback if provided
+      if (onSaveSettings) {
+        onSaveSettings(formData)
+      }
+
+      if (onNotification) {
+        onNotification('Settings saved successfully! ✓', 'success')
+      }
+
       setIsEdited(false)
+    } catch (error: any) {
+      console.error('Error saving settings:', error)
+      if (onNotification) {
+        onNotification(error.message || 'Failed to save settings', 'error')
+      }
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -40,7 +100,7 @@ export function SettingsSection({ settings, onSaveSettings }: SettingsSectionPro
       storePhone: settings?.storePhone || '+1 (555) 123-4567',
       storeEmail: settings?.storeEmail || 'store@example.com',
       taxRate: settings?.taxRate || 8.25,
-      currency: settings?.currency || 'USD',
+      currency: settings?.currency || 'AUD',
       receiptFooter: settings?.receiptFooter || 'Thank you for your business!',
       lowStockThreshold: settings?.lowStockThreshold || 10
     })
@@ -96,14 +156,33 @@ export function SettingsSection({ settings, onSaveSettings }: SettingsSectionPro
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  Email Address
+                  Email Address (for sending invoices)
                 </label>
                 <input
                   type="email"
                   value={formData.storeEmail}
-                  onChange={(e) => handleInputChange('storeEmail', e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-3 py-2 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  onChange={(e) => {
+                    handleInputChange('storeEmail', e.target.value)
+                    if (emailError) setEmailError('')
+                  }}
+                  onBlur={() => {
+                    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+                    if (formData.storeEmail && !emailRegex.test(formData.storeEmail)) {
+                      setEmailError('Invalid email format')
+                    }
+                  }}
+                  className={`w-full rounded-xl border ${
+                    emailError
+                      ? 'border-red-500 dark:border-red-400'
+                      : 'border-slate-300 dark:border-slate-600'
+                  } bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-3 py-2 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500`}
                 />
+                {emailError && (
+                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">{emailError}</p>
+                )}
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  This email will be used to send invoices to customers
+                </p>
               </div>
             </div>
           </div>
@@ -136,11 +215,8 @@ export function SettingsSection({ settings, onSaveSettings }: SettingsSectionPro
                   value={formData.currency}
                   onChange={(e) => handleInputChange('currency', e.target.value)}
                   className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-3 py-2 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  disabled
                 >
-                  <option value="USD">USD - US Dollar</option>
-                  <option value="EUR">EUR - Euro</option>
-                  <option value="GBP">GBP - British Pound</option>
-                  <option value="CAD">CAD - Canadian Dollar</option>
                   <option value="AUD">AUD - Australian Dollar</option>
                 </select>
               </div>
@@ -188,14 +264,14 @@ export function SettingsSection({ settings, onSaveSettings }: SettingsSectionPro
           <div className="flex gap-3 pt-6 border-t border-slate-200 dark:border-slate-600">
             <button 
               onClick={handleSave}
-              disabled={!isEdited}
+              disabled={!isEdited || isSaving}
               className={`rounded-xl px-6 py-3 font-medium ${
-                isEdited
+                isEdited && !isSaving
                   ? 'bg-brand-700 hover:bg-brand-500 text-white'
                   : 'bg-slate-300 dark:bg-slate-600 text-slate-500 dark:text-slate-400 cursor-not-allowed'
               }`}
             >
-              Save Settings
+              {isSaving ? 'Saving...' : 'Save Settings'}
             </button>
             <button 
               onClick={handleReset}

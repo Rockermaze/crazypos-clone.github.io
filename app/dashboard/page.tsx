@@ -14,6 +14,8 @@ import { DashboardHeader } from '@/components/DashboardHeader'
 import DashboardOnboarding from '@/components/DashboardOnboarding'
 import { CompanyInformationModal } from '@/components/onboarding/CompanyInformationModal'
 import { PaymentSettingsModal } from '@/components/onboarding/PaymentSettingsModal'
+import { InvoiceSuccessModal } from '@/components/InvoiceSuccessModal'
+import { PrintableInvoice } from '@/components/PrintableInvoice'
 
 // Import modular components
 import { SalesSection } from './components/Sales/SalesSection'
@@ -22,6 +24,7 @@ import { SalesHistorySection } from './components/SalesHistory/SalesHistorySecti
 import { RepairsSection } from './components/Repairs/RepairsSection'
 import { ReportsSection } from './components/Reports/ReportsSection'
 import { SettingsSection } from './components/Settings/SettingsSection'
+import { CustomersSection } from './components/Customers/CustomersSection'
 import { PaymentDashboard } from '@/components/PaymentDashboard'
 
 export default function DashboardPage() {
@@ -47,12 +50,17 @@ export default function DashboardPage() {
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [showRepairModal, setShowRepairModal] = useState(false)
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
+  const [showInvoiceSuccessModal, setShowInvoiceSuccessModal] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [productToDelete, setProductToDelete] = useState<Product | null>(null)
+  const [completedSale, setCompletedSale] = useState<Sale | null>(null)
+  const [invoiceEmailSent, setInvoiceEmailSent] = useState(false)
+  const [invoiceEmailMessage, setInvoiceEmailMessage] = useState('')
+  const [shouldPrintInvoice, setShouldPrintInvoice] = useState(false)
   
   // UI states
   const [loading, setLoading] = useState(true)
-  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'warning' } | null>(null)
 
   // Authentication redirect effect
   useEffect(() => {
@@ -68,6 +76,7 @@ export default function DashboardPage() {
       if (status === 'authenticated') {
         try {
           // Check onboarding status first
+          let shouldLoadMainData = showPOS
           const onboardingResponse = await fetch('/api/onboarding')
           if (onboardingResponse.ok) {
             const onboardingData = await onboardingResponse.json()
@@ -80,18 +89,25 @@ export default function DashboardPage() {
             
             // Show POS if onboarding is completed/skipped or user explicitly requested it
             setShowPOS(onboardingData.onboardingStatus.completed || onboardingData.onboardingStatus.skipped)
+            
+            // Determine if we should load main data
+            shouldLoadMainData = onboardingData.onboardingStatus.completed || onboardingData.onboardingStatus.skipped
           }
           
           // Load main data (if showing POS or onboarding is completed)
-          if (showPOS || onboardingData.onboardingStatus.completed || onboardingData.onboardingStatus.skipped) {
-            const [productsData, salesData, repairsData] = await Promise.all([
+          if (shouldLoadMainData) {
+            const [productsData, salesData, repairsData, settingsData] = await Promise.all([
               APIDataManager.getProducts(),
               APIDataManager.getSales(),
-              APIDataManager.getRepairs()
+              APIDataManager.getRepairs(),
+              fetch('/api/settings').then(res => res.ok ? res.json().then(data => data.settings) : null).catch(() => null)
             ])
             setProducts(productsData)
             setSales(salesData)
             setRepairs(repairsData)
+            if (settingsData) {
+              setSettings(settingsData)
+            }
           }
         } catch (error) {
           console.error('Error loading data:', error)
@@ -111,7 +127,9 @@ export default function DashboardPage() {
   // Clear notification effect
   useEffect(() => {
     if (notification) {
-      const timer = setTimeout(() => setNotification(null), 3000)
+      // Use longer timeout for messages that include email status
+      const timeout = notification.message.includes('📧') || notification.message.includes('⚠️') ? 6000 : 3000
+      const timer = setTimeout(() => setNotification(null), timeout)
       return () => clearTimeout(timer)
     }
   }, [notification])
@@ -128,14 +146,18 @@ export default function DashboardPage() {
     // Load POS data if not already loaded
     if (products.length === 0) {
       try {
-        const [productsData, salesData, repairsData] = await Promise.all([
+        const [productsData, salesData, repairsData, settingsData] = await Promise.all([
           APIDataManager.getProducts(),
           APIDataManager.getSales(),
-          APIDataManager.getRepairs()
+          APIDataManager.getRepairs(),
+          fetch('/api/settings').then(res => res.ok ? res.json().then(data => data.settings) : null).catch(() => null)
         ])
         setProducts(productsData)
         setSales(salesData)
         setRepairs(repairsData)
+        if (settingsData) {
+          setSettings(settingsData)
+        }
       } catch (error) {
         console.error('Error loading POS data:', error)
         setNotification({ message: 'Failed to load POS data', type: 'error' })
@@ -323,6 +345,24 @@ export default function DashboardPage() {
     }
   }
 
+  const handleBulkImport = async () => {
+    try {
+      // Refresh products list after bulk import
+      const updatedProducts = await APIDataManager.getProducts()
+      setProducts(updatedProducts)
+      setNotification({ 
+        message: 'Products imported successfully!', 
+        type: 'success' 
+      })
+    } catch (error: any) {
+      console.error('Error refreshing products after bulk import:', error)
+      setNotification({ 
+        message: 'Products imported but failed to refresh list', 
+        type: 'warning' 
+      })
+    }
+  }
+
   // Payment processing functions
   const handleProcessPayment = () => {
     if (cart.length === 0) {
@@ -345,7 +385,20 @@ export default function DashboardPage() {
         customerInfo: paymentData.customerInfo
       }
 
-      const sale = await APIDataManager.addSale(saleData)
+      const response = await fetch('/api/sales', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(saleData)
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create sale')
+      }
+
+      const sale = data.sale
+      const emailStatus = data.emailStatus
       
       if (sale) {
         // Refresh data
@@ -361,10 +414,47 @@ export default function DashboardPage() {
         setCart([])
         setShowPaymentModal(false)
         
-        setNotification({ 
-          message: `Sale completed! Receipt #${sale.receiptNumber}`, 
-          type: 'success' 
-        })
+        // Handle invoice preferences
+        const invoicePrefs = paymentData.invoicePreferences
+        if (invoicePrefs && (invoicePrefs.emailInvoice || invoicePrefs.printInvoice)) {
+          // Store sale data for invoice modal
+          setCompletedSale(sale)
+          
+          // Set email status
+          if (invoicePrefs.emailInvoice && emailStatus) {
+            setInvoiceEmailSent(emailStatus.sent)
+            setInvoiceEmailMessage(emailStatus.sent ? emailStatus.message : emailStatus.error)
+          } else {
+            setInvoiceEmailSent(false)
+            setInvoiceEmailMessage('')
+          }
+          
+          // Set print flag
+          setShouldPrintInvoice(invoicePrefs.printInvoice)
+          
+          // Show invoice success modal
+          setShowInvoiceSuccessModal(true)
+        } else {
+          // Show notification with email status (legacy behavior)
+          let message = `Sale completed! Receipt #${sale.receiptNumber}`
+          let type: 'success' | 'error' | 'warning' = 'success'
+          
+          // Add email status to notification
+          if (emailStatus) {
+            if (emailStatus.sent) {
+              message += ` 📧 ${emailStatus.message}`
+            } else {
+              // Show warning for email errors but don't fail the sale
+              message += ` ⚠️ ${emailStatus.error}`
+              type = 'warning'
+            }
+          }
+          
+          setNotification({ 
+            message, 
+            type 
+          })
+        }
       }
     } catch (error: any) {
       console.error('Error processing payment:', error)
@@ -392,6 +482,27 @@ export default function DashboardPage() {
       setNotification({ 
         message: error.message || 'Failed to create repair ticket', 
         type: 'error' 
+      })
+    }
+  }
+
+  const handlePrintInvoice = () => {
+    // Trigger browser print
+    window.print()
+  }
+
+  const handleCloseInvoiceModal = () => {
+    setShowInvoiceSuccessModal(false)
+    setCompletedSale(null)
+    setInvoiceEmailSent(false)
+    setInvoiceEmailMessage('')
+    setShouldPrintInvoice(false)
+    
+    // Show success notification
+    if (completedSale) {
+      setNotification({ 
+        message: `Sale completed! Receipt #${completedSale.receiptNumber}`, 
+        type: 'success' 
       })
     }
   }
@@ -432,6 +543,7 @@ export default function DashboardPage() {
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: '🏠', description: 'Overview & setup' },
     { id: 'pos', label: 'POS', icon: '💰', description: 'Process transactions' },
+    { id: 'customers', label: 'Customers', icon: '👥', description: 'Manage customers' },
     { id: 'inventory', label: 'Inventory', icon: '📦', description: 'Manage products' },
     { id: 'history', label: 'Sales History', icon: '📋', description: 'View past sales' },
     { id: 'repairs', label: 'Repairs', icon: '🔧', description: 'Manage repairs' },
@@ -540,6 +652,12 @@ export default function DashboardPage() {
             />
           )}
 
+          {(activeTab === 'customers' && showPOS) && (
+            <CustomersSection
+              onNotification={(message, type) => setNotification({ message, type })}
+            />
+          )}
+
           {(activeTab === 'inventory' && showPOS) && (
             <InventorySection
               products={products}
@@ -547,6 +665,7 @@ export default function DashboardPage() {
               onEditProduct={handleEditProduct}
               onDeleteProduct={handleDeleteProduct}
               onToggleActive={handleToggleProductActive}
+              onBulkImport={handleBulkImport}
             />
           )}
 
@@ -570,13 +689,10 @@ export default function DashboardPage() {
             <SettingsSection 
               settings={settings} 
               onSaveSettings={(updatedSettings) => {
-                // Here you would typically update the settings in your data store
-                console.log('Settings updated:', updatedSettings);
-                setNotification({ 
-                  message: 'Settings updated successfully', 
-                  type: 'success' 
-                });
+                // Update local state
+                setSettings(prev => ({ ...prev, ...updatedSettings } as StoreSettings))
               }}
+              onNotification={(message, type) => setNotification({ message, type })}
             />
           )}
 
@@ -613,12 +729,19 @@ export default function DashboardPage() {
 
       {/* Notification */}
       {notification && (
-        <div className={`fixed top-4 right-4 p-4 rounded-xl shadow-lg z-50 ${
+        <div className={`fixed top-4 right-4 p-4 rounded-xl shadow-lg z-50 max-w-md ${
           notification.type === 'success' 
-            ? 'bg-green-100 text-green-800 border border-green-200' 
-            : 'bg-red-100 text-red-800 border border-red-200'
+            ? 'bg-green-100 text-green-800 border border-green-200 dark:bg-green-900/30 dark:text-green-200 dark:border-green-800' 
+            : notification.type === 'warning'
+            ? 'bg-yellow-100 text-yellow-800 border border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-200 dark:border-yellow-800'
+            : 'bg-red-100 text-red-800 border border-red-200 dark:bg-red-900/30 dark:text-red-200 dark:border-red-800'
         }`}>
-          {notification.message}
+          <div className="flex items-start gap-2">
+            <span className="text-lg">
+              {notification.type === 'success' ? '✅' : notification.type === 'warning' ? '⚠️' : '❌'}
+            </span>
+            <p className="flex-1 text-sm">{notification.message}</p>
+          </div>
         </div>
       )}
 
@@ -716,6 +839,28 @@ export default function DashboardPage() {
           onConfirm={confirmDeleteProduct}
           title="Delete Product"
           message={`Are you sure you want to delete "${productToDelete.name}"? This action cannot be undone.`}
+        />
+      )}
+
+      {/* Invoice Success Modal */}
+      {showInvoiceSuccessModal && completedSale && (
+        <InvoiceSuccessModal
+          isOpen={showInvoiceSuccessModal}
+          onClose={handleCloseInvoiceModal}
+          receiptNumber={completedSale.receiptNumber}
+          saleId={completedSale.id}
+          emailSent={invoiceEmailSent}
+          emailMessage={invoiceEmailMessage}
+          shouldPrint={shouldPrintInvoice}
+          onPrint={handlePrintInvoice}
+        />
+      )}
+
+      {/* Printable Invoice (hidden, for printing) */}
+      {completedSale && (
+        <PrintableInvoice
+          sale={completedSale}
+          storeSettings={settings}
         />
       )}
     </div>

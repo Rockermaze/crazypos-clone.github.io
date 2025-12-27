@@ -31,6 +31,7 @@ export interface PaymentData {
   paymentGateway?: 'MANUAL' | 'STRIPE'
   amountPaid: number
   change: number
+  customerId?: string
   customerInfo?: {
     name?: string
     email?: string
@@ -39,6 +40,10 @@ export interface PaymentData {
   stripeData?: {
     paymentIntentId?: string
     transactionId?: string
+  }
+  invoicePreferences?: {
+    emailInvoice: boolean
+    printInvoice: boolean
   }
 }
 
@@ -147,15 +152,34 @@ function StripePaymentForm({ finalTotal, customerInfo, onPaymentSuccess, onPayme
 export function PaymentModal({ isOpen, onClose, onPaymentComplete, cartItems, total }: PaymentModalProps) {
   const { data: session } = useSession()
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'ONLINE' | 'DEBIT_CARD' | 'CREDIT_CARD' | 'STORE_CREDIT' | 'STRIPE'>('CASH')
-  const [amountPaid, setAmountPaid] = useState(total)
   const [discount, setDiscount] = useState(0)
+  
+  // Calculate tax and final total
+  const taxRate = 0.0825 // 8.25% - should come from settings
+  const subtotal = total
+  const discountAmount = (subtotal * discount) / 100
+  const taxAmount = (subtotal - discountAmount) * taxRate
+  const finalTotal = subtotal - discountAmount + taxAmount
+  
+  const [amountPaid, setAmountPaid] = useState(finalTotal)
   const [customerInfo, setCustomerInfo] = useState({
     name: '',
     email: '',
     phone: ''
   })
+  const [selectedCustomer, setSelectedCustomer] = useState<any>(null)
+  const [customerSearchResults, setCustomerSearchResults] = useState<any[]>([])
+  const [isSearchingCustomer, setIsSearchingCustomer] = useState(false)
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
+  const [showNewCustomerForm, setShowNewCustomerForm] = useState(false)
+  const [isCreatingCustomer, setIsCreatingCustomer] = useState(false)
+  const [customerCreateError, setCustomerCreateError] = useState('')
   const [stripeError, setStripeError] = useState('')
   const [stripeSuccess, setStripeSuccess] = useState('')
+  const [emailValidationError, setEmailValidationError] = useState('')
+  // Invoice preferences
+  const [emailInvoice, setEmailInvoice] = useState(false)
+  const [printInvoice, setPrintInvoice] = useState(false)
   // QR state
   const [qrLoading, setQrLoading] = useState(false)
   const [qrError, setQrError] = useState('')
@@ -167,12 +191,105 @@ export function PaymentModal({ isOpen, onClose, onPaymentComplete, cartItems, to
   }>(null)
   const [qrTimeRemaining, setQrTimeRemaining] = useState<number | null>(null)
   
-  const taxRate = 0.0825 // 8.25% - should come from settings
-  const subtotal = total
-  const discountAmount = (subtotal * discount) / 100
-  const taxAmount = (subtotal - discountAmount) * taxRate
-  const finalTotal = subtotal - discountAmount + taxAmount
+  // Debounce customer search
+  useEffect(() => {
+    const delayTimer = setTimeout(() => {
+      if (customerInfo.phone && customerInfo.phone.length >= 3) {
+        searchCustomer(customerInfo.phone)
+      } else {
+        setCustomerSearchResults([])
+        setShowCustomerDropdown(false)
+      }
+    }, 300)
+    
+    return () => clearTimeout(delayTimer)
+  }, [customerInfo.phone])
+  
+  const searchCustomer = async (contact: string) => {
+    try {
+      setIsSearchingCustomer(true)
+      const response = await fetch(`/api/customers?contact=${encodeURIComponent(contact)}`)
+      const data = await response.json()
+      
+      if (data.success && data.customer) {
+        setCustomerSearchResults([data.customer])
+        setShowCustomerDropdown(true)
+      } else {
+        setCustomerSearchResults([])
+        setShowCustomerDropdown(false)
+      }
+    } catch (error) {
+      console.error('Error searching customer:', error)
+    } finally {
+      setIsSearchingCustomer(false)
+    }
+  }
+  
+  const selectCustomer = (customer: any) => {
+    setSelectedCustomer(customer)
+    setCustomerInfo({
+      name: customer.name || '',
+      email: customer.email || '',
+      phone: customer.phone || ''
+    })
+    setShowCustomerDropdown(false)
+    setShowNewCustomerForm(false)
+  }
+  
+  const clearCustomer = () => {
+    setSelectedCustomer(null)
+    setCustomerInfo({ name: '', email: '', phone: '' })
+    setCustomerSearchResults([])
+    setShowNewCustomerForm(false)
+  }
+  
+  const handleCreateNewCustomer = async () => {
+    try {
+      setIsCreatingCustomer(true)
+      setCustomerCreateError('')
+      
+      // Validate required fields
+      if (!customerInfo.name || !customerInfo.phone) {
+        setCustomerCreateError('Name and phone are required')
+        return
+      }
+      
+      const response = await fetch('/api/customers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(customerInfo)
+      })
+      
+      const data = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create customer')
+      }
+      
+      if (data.success && data.customer) {
+        // Select the newly created customer
+        setSelectedCustomer(data.customer)
+        setCustomerInfo({
+          name: data.customer.name || '',
+          email: data.customer.email || '',
+          phone: data.customer.phone || ''
+        })
+        setShowNewCustomerForm(false)
+        setCustomerCreateError('')
+      }
+    } catch (error: any) {
+      setCustomerCreateError(error.message || 'Failed to create customer')
+    } finally {
+      setIsCreatingCustomer(false)
+    }
+  }
+  
   const change = paymentMethod === 'CASH' ? Math.max(0, amountPaid - finalTotal) : 0
+  
+  // Update amountPaid when finalTotal changes (due to discount changes)
+  useEffect(() => {
+    setAmountPaid(finalTotal)
+  }, [finalTotal])
 
   // Stripe payment handlers
   const handleStripePaymentSuccess = (paymentIntentId: string) => {
@@ -188,10 +305,15 @@ export function PaymentModal({ isOpen, onClose, onPaymentComplete, cartItems, to
       paymentGateway: 'STRIPE',
       amountPaid: finalTotal,
       change: 0,
+      customerId: selectedCustomer?.id,
       customerInfo: customerInfo.name || customerInfo.email || customerInfo.phone ? customerInfo : undefined,
       stripeData: {
         paymentIntentId,
         transactionId: paymentIntentId
+      },
+      invoicePreferences: {
+        emailInvoice,
+        printInvoice
       }
     }
 
@@ -279,8 +401,13 @@ export function PaymentModal({ isOpen, onClose, onPaymentComplete, cartItems, to
       paymentGateway: 'MANUAL',
       amountPaid: paymentMethod === 'CASH' ? amountPaid : finalTotal,
       change,
-      customerInfo: customerInfo.name || customerInfo.email || customerInfo.phone ? customerInfo : undefined
-    }
+      customerInfo: customerInfo.name || customerInfo.email || customerInfo.phone ? customerInfo : undefined,
+      customerId: selectedCustomer?.id,
+      invoicePreferences: {
+        emailInvoice,
+        printInvoice
+      }
+    } as any
 
     onPaymentComplete(paymentData)
   }
@@ -488,29 +615,248 @@ export function PaymentModal({ isOpen, onClose, onPaymentComplete, cartItems, to
 
         {/* Customer Information (Optional) */}
         <div>
-          <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">Customer Information (Optional)</h4>
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300">Customer Information (Optional)</h4>
+            <div className="flex gap-2">
+              {!selectedCustomer && (
+                <button
+                  type="button"
+                  onClick={() => setShowNewCustomerForm(!showNewCustomerForm)}
+                  className="text-xs px-3 py-1 rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-medium transition-colors"
+                >
+                  {showNewCustomerForm ? 'Cancel' : '+ New Customer'}
+                </button>
+              )}
+              {selectedCustomer && (
+                <button
+                  type="button"
+                  onClick={clearCustomer}
+                  className="text-xs text-brand-600 dark:text-brand-400 hover:underline"
+                >
+                  Clear Customer
+                </button>
+              )}
+            </div>
+          </div>
+          
+          {selectedCustomer && (
+            <div className="mb-3 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="font-medium text-green-900 dark:text-green-100">{selectedCustomer.name}</p>
+                  <p className="text-sm text-green-700 dark:text-green-300">ID: {selectedCustomer.customerId}</p>
+                  {selectedCustomer.dueAmount > 0 && (
+                    <p className="text-sm text-red-600 dark:text-red-400 font-medium mt-1">
+                      Due: ${selectedCustomer.dueAmount.toFixed(2)}
+                    </p>
+                  )}
+                  {selectedCustomer.purchaseCount > 0 && (
+                    <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                      {selectedCustomer.purchaseCount} previous purchases (${selectedCustomer.totalPurchases.toFixed(2)} total)
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* New Customer Form */}
+          {showNewCustomerForm && !selectedCustomer && (
+            <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl space-y-3">
+              <div className="flex items-center justify-between mb-2">
+                <h5 className="text-sm font-semibold text-blue-900 dark:text-blue-100">Create New Customer</h5>
+              </div>
+              
+              {customerCreateError && (
+                <div className="p-2 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg">
+                  <p className="text-xs text-red-600 dark:text-red-400">{customerCreateError}</p>
+                </div>
+              )}
+              
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Customer name"
+                    value={customerInfo.name}
+                    onChange={(e) => setCustomerInfo(prev => ({ ...prev, name: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    Phone <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="tel"
+                    placeholder="Phone number"
+                    value={customerInfo.phone}
+                    onChange={(e) => setCustomerInfo(prev => ({ ...prev, phone: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    Email (Optional - for invoice)
+                  </label>
+                  <input
+                    type="email"
+                    placeholder="example@email.com"
+                    value={customerInfo.email}
+                    onChange={(e) => {
+                      const email = e.target.value
+                      setCustomerInfo(prev => ({ ...prev, email }))
+                      // Clear validation error when user types
+                      if (emailValidationError) setEmailValidationError('')
+                    }}
+                    onBlur={() => {
+                      // Validate email format on blur if provided
+                      if (customerInfo.email && customerInfo.email.trim()) {
+                        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+                        if (!emailRegex.test(customerInfo.email.trim())) {
+                          setEmailValidationError('Invalid email format')
+                        }
+                      }
+                    }}
+                    className={`w-full rounded-lg border ${
+                      emailValidationError 
+                        ? 'border-red-500 dark:border-red-400' 
+                        : 'border-slate-300 dark:border-slate-600'
+                    } bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500`}
+                  />
+                  {emailValidationError && (
+                    <p className="text-xs text-red-600 dark:text-red-400 mt-1">{emailValidationError}</p>
+                  )}
+                  {customerInfo.email && !emailValidationError && (
+                    <p className="text-xs text-green-600 dark:text-green-400 mt-1">✓ Invoice will be sent to this email</p>
+                  )}
+                </div>
+                
+                <button
+                  type="button"
+                  onClick={handleCreateNewCustomer}
+                  disabled={isCreatingCustomer || !customerInfo.name || !customerInfo.phone}
+                  className="w-full bg-brand-600 hover:bg-brand-700 text-white font-medium py-2 px-4 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+                >
+                  {isCreatingCustomer ? 'Creating...' : 'Create Customer'}
+                </button>
+              </div>
+            </div>
+          )}
+          
+          {!showNewCustomerForm && (
           <div className="grid gap-3 md:grid-cols-3">
             <input
               type="text"
               placeholder="Customer name"
               value={customerInfo.name}
               onChange={(e) => setCustomerInfo(prev => ({ ...prev, name: e.target.value }))}
-              className="rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 px-3 py-2 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              disabled={!!selectedCustomer}
+              className="rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 px-3 py-2 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:opacity-50 disabled:cursor-not-allowed"
             />
-            <input
-              type="email"
-              placeholder="Email"
-              value={customerInfo.email}
-              onChange={(e) => setCustomerInfo(prev => ({ ...prev, email: e.target.value }))}
-              className="rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 px-3 py-2 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-            />
-            <input
-              type="tel"
-              placeholder="Phone"
-              value={customerInfo.phone}
-              onChange={(e) => setCustomerInfo(prev => ({ ...prev, phone: e.target.value }))}
-              className="rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 px-3 py-2 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-            />
+            <div className="relative">
+              <input
+                type="email"
+                placeholder="Email (for invoice)"
+                value={customerInfo.email}
+                onChange={(e) => {
+                  const email = e.target.value
+                  setCustomerInfo(prev => ({ ...prev, email }))
+                  if (emailValidationError) setEmailValidationError('')
+                }}
+                onBlur={() => {
+                  if (customerInfo.email && customerInfo.email.trim()) {
+                    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+                    if (!emailRegex.test(customerInfo.email.trim())) {
+                      setEmailValidationError('Invalid email format')
+                    }
+                  }
+                }}
+                disabled={!!selectedCustomer}
+                className={`w-full rounded-xl border ${
+                  emailValidationError 
+                    ? 'border-red-500 dark:border-red-400' 
+                    : 'border-slate-300 dark:border-slate-600'
+                } bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 px-3 py-2 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:opacity-50 disabled:cursor-not-allowed`}
+              />
+              {emailValidationError && (
+                <p className="text-xs text-red-600 dark:text-red-400 mt-1 absolute">{emailValidationError}</p>
+              )}
+            </div>
+            <div className="relative">
+              <input
+                type="tel"
+                placeholder="Phone (search customers)"
+                value={customerInfo.phone}
+                onChange={(e) => {
+                  setCustomerInfo(prev => ({ ...prev, phone: e.target.value }))
+                  setSelectedCustomer(null)
+                }}
+                disabled={!!selectedCustomer}
+                className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 px-3 py-2 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+              {isSearchingCustomer && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  <div className="animate-spin h-4 w-4 border-2 border-brand-500 border-t-transparent rounded-full"></div>
+                </div>
+              )}
+              
+              {showCustomerDropdown && customerSearchResults.length > 0 && (
+                <div className="absolute z-50 top-full mt-1 w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                  {customerSearchResults.map((customer) => (
+                    <button
+                      key={customer.id}
+                      type="button"
+                      onClick={() => selectCustomer(customer)}
+                      className="w-full text-left px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-600 border-b border-slate-200 dark:border-slate-600 last:border-b-0"
+                    >
+                      <p className="font-medium text-slate-900 dark:text-slate-100">{customer.name}</p>
+                      <p className="text-xs text-slate-600 dark:text-slate-300">{customer.phone}</p>
+                      {customer.dueAmount > 0 && (
+                        <p className="text-xs text-red-600 dark:text-red-400">Due: ${customer.dueAmount.toFixed(2)}</p>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          )}
+        </div>
+
+        {/* Invoice Preferences */}
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
+          <h4 className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-3">📄 Invoice Options</h4>
+          <div className="space-y-2">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={emailInvoice}
+                onChange={(e) => setEmailInvoice(e.target.checked)}
+                disabled={!customerInfo.email}
+                className="w-4 h-4 rounded border-blue-300 dark:border-blue-600 text-brand-600 focus:ring-brand-500 focus:ring-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+              <span className="text-sm text-blue-800 dark:text-blue-200">
+                📧 Email invoice to customer
+                {!customerInfo.email && (
+                  <span className="text-xs text-blue-600 dark:text-blue-400 ml-2">(Enter customer email above)</span>
+                )}
+              </span>
+            </label>
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={printInvoice}
+                onChange={(e) => setPrintInvoice(e.target.checked)}
+                className="w-4 h-4 rounded border-blue-300 dark:border-blue-600 text-brand-600 focus:ring-brand-500 focus:ring-offset-0"
+              />
+              <span className="text-sm text-blue-800 dark:text-blue-200">🖨️ Print invoice after payment</span>
+            </label>
           </div>
         </div>
 

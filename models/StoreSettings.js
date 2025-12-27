@@ -51,8 +51,8 @@ const storeSettingsSchema = new mongoose.Schema({
   currency: {
     type: String,
     required: [true, 'Currency is required'],
-    enum: ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'INR'],
-    default: 'USD'
+    enum: ['AUD'],
+    default: 'AUD'
   },
   receiptFooter: {
     type: String,

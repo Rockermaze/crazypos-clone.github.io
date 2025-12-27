@@ -11,8 +11,19 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  // Turbopack config placeholder to silence Next 16 warning
+  // Disable source maps in production
+  productionBrowserSourceMaps: false,
+  // Webpack config to disable source maps in development
+  webpack: (config, { dev, isServer }) => {
+    if (dev) {
+      // Disable source maps in development
+      config.devtool = false;
+    }
+    return config;
+  },
+  // Turbopack configuration
   turbopack: {},
+  // Note: Source map warnings in development with Turbopack are cosmetic and don't affect functionality
 };
 
 module.exports = nextConfig;

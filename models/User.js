@@ -12,8 +12,21 @@ const userSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: [true, 'Password is required'],
+    required: function() {
+      // Password only required for non-OAuth users
+      return !this.googleId
+    },
     minlength: [6, 'Password must be at least 6 characters long']
+  },
+  // OAuth provider fields
+  googleId: {
+    type: String,
+    sparse: true,
+    unique: true,
+    index: true
+  },
+  image: {
+    type: String // Profile image from OAuth provider
   },
   name: {
     type: String,
@@ -23,7 +36,7 @@ const userSchema = new mongoose.Schema({
   },
   businessName: {
     type: String,
-    required: [true, 'Business name is required'],
+    required: false, // Not required for OAuth users initially
     trim: true,
     maxlength: [100, 'Business name cannot be more than 100 characters']
   },
@@ -116,9 +129,10 @@ const userSchema = new mongoose.Schema({
   timestamps: true
 })
 
-// Hash password before saving
+// Hash password before saving (only for non-OAuth users)
 userSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) return next()
+  // Skip password hashing if user is OAuth user or password not modified
+  if (!this.password || !this.isModified('password')) return next()
   
   try {
     const salt = await bcrypt.genSalt(12)

@@ -151,9 +151,10 @@ const storeSettingsSchema = new mongoose.Schema({
 // Counter Schema
 const counterSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
-  receiptNumber: { type: Number, required: true, min: 1000, default: 1000 },
-  ticketNumber: { type: Number, required: true, min: 1000, default: 1000 },
-  productId: { type: Number, required: true, min: 1000, default: 1000 }
+  receiptNumber: { type: Number, required: true, min: 1, default: 1 },
+  ticketNumber: { type: Number, required: true, min: 1, default: 1 },
+  productId: { type: Number, required: true, min: 1, default: 1 },
+  customerId: { type: Number, required: true, min: 1, default: 1 }
 }, { timestamps: true })
 
 // Create models
@@ -220,9 +221,10 @@ async function seedDatabase() {
     console.log('🔢 Creating counters...')
     const counter = new Counter({
       userId: savedUser._id,
-      receiptNumber: 1000,
-      ticketNumber: 1000,
-      productId: 1000
+      receiptNumber: 1,
+      ticketNumber: 1,
+      productId: 1,
+      customerId: 1
     })
     
     await counter.save()

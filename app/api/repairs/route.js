@@ -4,6 +4,9 @@ import { authOptions } from '@/lib/auth'
 import connectDB from '@/lib/mongodb'
 import RepairTicket from '@/models/RepairTicket'
 import Counter from '@/models/Counter'
+import StoreSettings from '@/models/StoreSettings'
+import { generateRepairInvoicePDF } from '@/lib/pdf/generateRepairInvoice'
+import { sendRepairTicketEmail } from '@/lib/email'
 
 // GET /api/repairs - Get all repair tickets for authenticated user
 export async function GET(request) {
@@ -106,22 +109,9 @@ export async function POST(request) {
 
     await connectDB()
 
-    // Get or create counter for ticket number
-    let counter = await Counter.findOne({ userId: session.user.id })
-    if (!counter) {
-      counter = new Counter({ 
-        userId: session.user.id,
-        receiptNumber: 1000,
-        ticketNumber: 1000,
-        productId: 1000
-      })
-      await counter.save()
-    }
-
-    // Generate ticket number
-    counter.ticketNumber += 1
-    await counter.save()
-    const ticketNumber = `T${counter.ticketNumber}`
+    // Generate ticket number using Counter.getNextSequence
+    const ticketCounter = await Counter.getNextSequence('ticket', session.user.id)
+    const ticketNumber = `TKT-${ticketCounter.toString().padStart(5, '0')}`
 
     // Create new repair ticket
     const newRepair = new RepairTicket({
@@ -152,6 +142,41 @@ export async function POST(request) {
     })
 
     const savedRepair = await newRepair.save()
+
+    // Send ticket email if customer email is provided
+    if (customerInfo?.email) {
+      try {
+        // Fetch store settings
+        const storeSettings = await StoreSettings.findOne({ userId: session.user.id })
+        
+        if (storeSettings) {
+          // Generate PDF
+          const pdfBuffer = generateRepairInvoicePDF({
+            ticket: savedRepair,
+            storeSettings
+          })
+          
+          // Send email
+          const emailResult = await sendRepairTicketEmail({
+            to: customerInfo.email,
+            customerName: customerInfo.name,
+            ticketNumber: savedRepair.ticketNumber,
+            pdfBuffer,
+            storeName: storeSettings.storeName,
+            storeEmail: storeSettings.storeEmail
+          })
+          
+          if (emailResult.success) {
+            console.log(`Repair ticket email sent successfully to ${customerInfo.email}`)
+          } else {
+            console.error(`Failed to send repair ticket email: ${emailResult.error}`)
+          }
+        }
+      } catch (emailErr) {
+        console.error('Warning: Failed to send repair ticket email:', emailErr)
+        // Don't fail the ticket creation if email sending fails
+      }
+    }
 
     // Convert to response format
     const responseRepair = {

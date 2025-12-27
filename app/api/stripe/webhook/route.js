@@ -158,15 +158,9 @@ async function handlePaymentIntentSucceeded(paymentIntent) {
     if (!transaction.saleId) {
       const userId = transaction.userId
 
-      // Ensure a counter exists and increment receipt number
-      let counter = await Counter.findOne({ userId })
-      if (!counter) {
-        counter = new Counter({ userId, receiptNumber: 1000, ticketNumber: 1000, productId: 1000 })
-        await counter.save()
-      }
-      counter.receiptNumber += 1
-      await counter.save()
-      const receiptNumber = `R${counter.receiptNumber}`
+      // Generate receipt number using Counter.getNextSequence
+      const receiptCounter = await Counter.getNextSequence('receipt', userId)
+      const receiptNumber = `REC-${receiptCounter.toString().padStart(5, '0')}`
 
       // Find or create a non-inventory service product to attach the sale item to
       let serviceProduct = await Product.findOne({ userId, barcode: 'DIRECT_PAYMENT' })

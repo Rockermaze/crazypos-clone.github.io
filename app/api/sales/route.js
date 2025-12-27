@@ -6,6 +6,11 @@ import Sale from '@/models/Sale'
 import Product from '@/models/Product'
 import Counter from '@/models/Counter'
 import Transaction from '@/models/Transaction'
+import Customer from '@/models/Customer'
+import StoreSettings from '@/models/StoreSettings'
+import { generateSalesInvoicePDF } from '@/lib/pdf/generateSalesInvoice'
+import { sendSalesInvoiceEmail } from '@/lib/email'
+import { validateEmail, validateEmailConfig } from '@/lib/emailValidator'
 
 // GET /api/sales - Get all sales for authenticated user
 export async function GET(request) {
@@ -81,6 +86,7 @@ export async function POST(request) {
     paymentMethod,
     paymentGateway,
     customerInfo,
+    customerId,
     stripeData
   } = body
 
@@ -101,22 +107,9 @@ export async function POST(request) {
 
     await connectDB()
 
-    // Get or create counter for receipt number
-    let counter = await Counter.findOne({ userId: session.user.id })
-    if (!counter) {
-      counter = new Counter({ 
-        userId: session.user.id,
-        receiptNumber: 1000,
-        ticketNumber: 1000,
-        productId: 1000
-      })
-      await counter.save()
-    }
-
-    // Generate receipt number
-    counter.receiptNumber += 1
-    await counter.save()
-    const receiptNumber = `R${counter.receiptNumber}`
+    // Generate receipt number using Counter.getNextSequence
+    const receiptCounter = await Counter.getNextSequence('receipt', session.user.id)
+    const receiptNumber = `REC-${receiptCounter.toString().padStart(5, '0')}`
 
     // Validate and update product stock
     for (const item of items) {
@@ -144,6 +137,30 @@ export async function POST(request) {
       await product.save()
     }
 
+    // Handle customer linkage
+    let linkedCustomerId = customerId
+    
+    // If customer info provided but no customerId, try to find or create customer
+    if (!linkedCustomerId && customerInfo && (customerInfo.phone || customerInfo.email)) {
+      const contact = customerInfo.phone || customerInfo.email
+      let customer = await Customer.findByContact(session.user.id, contact)
+      
+      // Create new customer if not found and phone is provided
+      if (!customer && customerInfo.phone && customerInfo.name) {
+        customer = new Customer({
+          userId: session.user.id,
+          name: customerInfo.name,
+          email: customerInfo.email || undefined,
+          phone: customerInfo.phone
+        })
+        await customer.save()
+      }
+      
+      if (customer) {
+        linkedCustomerId = customer._id
+      }
+    }
+
     // Create new sale
     const newSale = new Sale({
       items: items.map((item) => ({
@@ -162,6 +179,7 @@ export async function POST(request) {
       paymentGateway: paymentGateway || (paymentMethod === 'STRIPE' ? 'STRIPE' : 'MANUAL'),
       paymentStatus: paymentMethod === 'STRIPE' ? 'COMPLETED' : 'COMPLETED',
       externalTransactionId: stripeData?.paymentIntentId || null,
+      customerId: linkedCustomerId,
       customerInfo,
       receiptNumber,
       cashierId: session.user.id,
@@ -169,6 +187,19 @@ export async function POST(request) {
     })
 
     const savedSale = await newSale.save()
+
+    // Update customer purchase history if linked
+    if (linkedCustomerId) {
+      try {
+        const customer = await Customer.findById(linkedCustomerId)
+        if (customer) {
+          await customer.addPurchase(savedSale._id, savedSale.total, savedSale.receiptNumber)
+        }
+      } catch (custErr) {
+        console.error('Warning: Failed to update customer purchase history:', custErr)
+        // Don't fail the sale if customer update fails
+      }
+    }
 
     // Create corresponding Transaction record for all payment methods
     try {
@@ -311,6 +342,117 @@ export async function POST(request) {
       // Do not fail the sale creation if transaction creation fails
     }
 
+    // Send invoice email if customer email is provided
+    let emailStatus = null
+    if (customerInfo?.email) {
+      try {
+        console.log('📧 Starting email process for customer:', customerInfo.email)
+        
+        // Validate customer email
+        const customerEmailValidation = validateEmail(customerInfo.email)
+        if (!customerEmailValidation.isValid) {
+          emailStatus = {
+            sent: false,
+            error: `Customer email invalid: ${customerEmailValidation.error}`
+          }
+          console.error('❌ Customer email validation failed:', customerEmailValidation.error)
+        } else {
+          console.log('✅ Customer email validated:', customerEmailValidation.email)
+          
+          // Check email configuration
+          const emailConfigCheck = validateEmailConfig()
+          if (!emailConfigCheck.isConfigured) {
+            emailStatus = {
+              sent: false,
+              error: `Email not configured: ${emailConfigCheck.error}`
+            }
+            console.error('❌ Email configuration check failed:', emailConfigCheck.error)
+          } else {
+            console.log('✅ Email configuration validated')
+            
+            // Fetch store settings
+            const storeSettings = await StoreSettings.findOne({ userId: session.user.id })
+            
+            if (!storeSettings) {
+              emailStatus = {
+                sent: false,
+                error: 'Store settings not found. Please configure your store in Settings.'
+              }
+              console.error('❌ Store settings not found for user:', session.user.id)
+            } else if (!storeSettings.storeEmail) {
+              emailStatus = {
+                sent: false,
+                error: 'Store email not configured. Please set your store email in Settings.'
+              }
+              console.error('❌ Store email not set in store settings')
+            } else {
+              console.log('✅ Store settings found, validating store email:', storeSettings.storeEmail)
+              
+              // Validate store email
+              const storeEmailValidation = validateEmail(storeSettings.storeEmail)
+              if (!storeEmailValidation.isValid) {
+                emailStatus = {
+                  sent: false,
+                  error: `Store email invalid: ${storeEmailValidation.error}. Please update in Settings.`
+                }
+                console.error('❌ Store email validation failed:', storeEmailValidation.error)
+              } else {
+                console.log('✅ Store email validated:', storeEmailValidation.email)
+                console.log('📄 Generating invoice PDF...')
+                
+                // All validations passed, send email
+                // Generate PDF
+                const pdfBuffer = generateSalesInvoicePDF({
+                  sale: savedSale,
+                  storeSettings,
+                  customerInfo
+                })
+                
+                console.log('✅ PDF generated, size:', pdfBuffer.length, 'bytes')
+                console.log('📧 Sending email to:', customerEmailValidation.email)
+                
+                // Send email
+                const emailResult = await sendSalesInvoiceEmail({
+                  to: customerEmailValidation.email,
+                  customerName: customerInfo.name,
+                  receiptNumber: savedSale.receiptNumber,
+                  pdfBuffer,
+                  storeName: storeSettings.storeName,
+                  storeEmail: storeEmailValidation.email
+                })
+                
+                if (emailResult.success) {
+                  emailStatus = {
+                    sent: true,
+                    message: `Invoice sent to ${customerEmailValidation.email}`
+                  }
+                  console.log('✅ Invoice email sent successfully to:', customerEmailValidation.email, 'MessageID:', emailResult.messageId)
+                } else {
+                  emailStatus = {
+                    sent: false,
+                    error: `Failed to send email: ${emailResult.error}`
+                  }
+                  console.error('❌ Failed to send invoice email. Error:', emailResult.error)
+                }
+              }
+            }
+          }
+        }
+      } catch (emailErr) {
+        emailStatus = {
+          sent: false,
+          error: `Email error: ${emailErr.message || 'Unknown error'}`
+        }
+        console.error('❌ CRITICAL: Failed to send invoice email. Error details:')
+        console.error('   Error message:', emailErr.message)
+        console.error('   Error stack:', emailErr.stack)
+        console.error('   Customer email:', customerInfo?.email)
+        // Don't fail the sale if email sending fails
+      }
+    } else {
+      console.log('ℹ️  No customer email provided, skipping invoice email')
+    }
+
     // Convert to response format
     const responseSale = {
       id: savedSale._id.toString(),
@@ -330,7 +472,8 @@ export async function POST(request) {
     return NextResponse.json(
       { 
         message: 'Sale recorded successfully', 
-        sale: responseSale 
+        sale: responseSale,
+        emailStatus
       },
       { status: 201 }
     )

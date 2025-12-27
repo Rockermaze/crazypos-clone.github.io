@@ -146,6 +146,12 @@ const saleSchema = new mongoose.Schema({
     default: 'USD',
     uppercase: true
   },
+  // Customer reference
+  customerId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Customer',
+    index: true
+  },
   customerInfo: {
     type: customerInfoSchema,
     default: undefined
@@ -178,6 +184,8 @@ saleSchema.index({ userId: 1, paymentMethod: 1 })
 saleSchema.index({ cashierId: 1, createdAt: -1 })
 saleSchema.index({ transactionId: 1 })
 saleSchema.index({ externalTransactionId: 1 })
+saleSchema.index({ customerId: 1, createdAt: -1 })
+saleSchema.index({ userId: 1, customerId: 1 })
 
 // Compound indexes for complex queries
 saleSchema.index({ userId: 1, paymentStatus: 1, createdAt: -1 })
@@ -293,6 +301,7 @@ saleSchema.methods.toAPIResponse = function() {
     paymentGateway: sale.paymentGateway,
     paymentProcessedAt: sale.paymentProcessedAt,
     processingFee: sale.processingFee,
+    customerId: sale.customerId,
     customerInfo: sale.customerInfo,
     transactionId: sale.transactionId,
     createdAt: sale.createdAt,

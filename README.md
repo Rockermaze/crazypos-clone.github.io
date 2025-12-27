@@ -31,6 +31,12 @@ Copy `.env.example` to `.env.local` and set:
 - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` Stripe publishable key
 - `STRIPE_SECRET_KEY` Stripe secret key
 - `STRIPE_WEBHOOK_SECRET` Stripe webhook signing secret
+- `EMAIL_HOST` SMTP host (e.g., smtp.gmail.com)
+- `EMAIL_PORT` SMTP port (e.g., 587)
+- `EMAIL_SECURE` true for 465, false for other ports
+- `EMAIL_USER` your email address
+- `EMAIL_PASSWORD` your email password or app password
+- `EMAIL_FROM_NAME` sender name (optional)
 - Optional: `NEXT_PUBLIC_APP_NAME`, `PLATFORM_FEE_PERCENTAGE`, Google OAuth keys
 
 ## Directory Structure
@@ -95,6 +101,20 @@ Copy `.env.example` to `.env.local` and set:
 ## Reporting
 - `lib/pdfReportService.js` generate PDF reports
 - Dashboard sections for sales history and payments report
+
+## Email Invoice Feature
+- Automatic PDF invoice generation for every sale
+- Sends invoice via email to customers when email is provided
+- **Setup Required:**
+  1. Configure email settings in `.env.local` (see Environment Variables)
+  2. Set store email in Dashboard → Settings
+  3. For Gmail: Enable 2FA and create App Password at https://myaccount.google.com/apppasswords
+- **Files:**
+  - `lib/email.js` email sending functions
+  - `lib/pdf/generateSalesInvoice.js` PDF generation
+  - Automatically triggered in `app/api/sales/route.js` after sale completion
+- **Validation:** System validates both customer and store emails before sending
+- **Notifications:** Shows success/error popup to user after sale completion
 
 ## File Structure
 d:\CrazyPos\YourPOS

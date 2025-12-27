@@ -29,7 +29,7 @@ export function PaymentSettingsModal({ isOpen, onClose, onComplete }: PaymentSet
     enableBankTransfer: false,
     enableCash: true,
     platformFeePercentage: 1.5,
-    currency: 'USD',
+    currency: 'AUD',
     acceptTerms: false
   })
   const [loading, setLoading] = useState(false)
@@ -274,13 +274,9 @@ export function PaymentSettingsModal({ isOpen, onClose, onComplete }: PaymentSet
                 value={formData.currency}
                 onChange={(e) => handleInputChange('currency', e.target.value)}
                 className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-3 py-2 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                disabled
               >
-                <option value="USD">USD - US Dollar</option>
-                <option value="EUR">EUR - Euro</option>
-                <option value="GBP">GBP - British Pound</option>
-                <option value="CAD">CAD - Canadian Dollar</option>
                 <option value="AUD">AUD - Australian Dollar</option>
-                <option value="INR">INR - Indian Rupee</option>
               </select>
             </div>
 

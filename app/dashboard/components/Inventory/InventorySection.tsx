@@ -1,6 +1,7 @@
 'use client'
 import { Product } from '@/types'
 import { useState } from 'react'
+import { BulkImportModal } from '@/components/BulkImportModal'
 
 interface InventorySectionProps {
   products: Product[]
@@ -8,6 +9,7 @@ interface InventorySectionProps {
   onEditProduct: (product: Product) => void
   onDeleteProduct: (product: Product) => void
   onToggleActive?: (product: Product) => void
+  onBulkImport?: () => Promise<void>
 }
 
 export function InventorySection({
@@ -15,9 +17,11 @@ export function InventorySection({
   onAddProduct,
   onEditProduct,
   onDeleteProduct,
-  onToggleActive
+  onToggleActive,
+  onBulkImport
 }: InventorySectionProps) {
   const [togglingProduct, setTogglingProduct] = useState<string | null>(null)
+  const [showBulkImportModal, setShowBulkImportModal] = useState(false)
 
   const handleToggleActive = async (product: Product) => {
     if (!onToggleActive) return
@@ -25,17 +29,52 @@ export function InventorySection({
     await onToggleActive(product)
     setTogglingProduct(null)
   }
+
+  const handleBulkImport = async (productsData: any[]) => {
+    const response = await fetch('/api/products/bulk-import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ products: productsData })
+    })
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      if (data.duplicates) {
+        const duplicateList = data.duplicates
+          .map((d: any) => `${d.barcode} (exists in "${d.existingProduct}")`)
+          .join(', ')
+        throw new Error(`Duplicate barcodes found: ${duplicateList}`)
+      }
+      throw new Error(data.error || 'Failed to import products')
+    }
+
+    // Trigger refresh by calling parent callback
+    if (onBulkImport) {
+      await onBulkImport()
+    }
+  }
+
   return (
     <div className="p-6">
       <div className="bg-white dark:bg-slate-800 rounded-xl p-6">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Inventory Management</h2>
-          <button 
-            onClick={onAddProduct}
-            className="rounded-xl bg-brand-700 px-4 py-2 text-white font-medium hover:bg-brand-500"
-          >
-            Add Product
-          </button>
+          <div className="flex gap-3">
+            <button 
+              onClick={() => setShowBulkImportModal(true)}
+              className="rounded-xl bg-slate-600 px-4 py-2 text-white font-medium hover:bg-slate-500 flex items-center gap-2"
+            >
+              <span>📊</span>
+              Import from Excel
+            </button>
+            <button 
+              onClick={onAddProduct}
+              className="rounded-xl bg-brand-700 px-4 py-2 text-white font-medium hover:bg-brand-500"
+            >
+              Add Product
+            </button>
+          </div>
         </div>
         
         <div className="overflow-x-auto">
@@ -123,6 +162,13 @@ export function InventorySection({
           )}
         </div>
       </div>
+
+      {/* Bulk Import Modal */}
+      <BulkImportModal
+        isOpen={showBulkImportModal}
+        onClose={() => setShowBulkImportModal(false)}
+        onImport={handleBulkImport}
+      />
     </div>
   )
 }
