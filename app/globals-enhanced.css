@@ -1,0 +1,235 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Brand colors */
+:root{
+  --brand-900:#1a1446;
+  --brand-700:#3b2db8;
+  --brand-500:#6b5cff;
+  --brand-100:#f0f0ff;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+  }
+}
+
+html {
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+html, body {
+  height: 100%;
+}
+
+/* Light theme (default) */
+.light {
+  color-scheme: light;
+}
+
+/* Dark theme */
+.dark {
+  color-scheme: dark;
+}
+
+/* Custom scrollbar for dark mode */
+.dark ::-webkit-scrollbar {
+  width: 8px;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 4px;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+/* Selection colors */
+::selection {
+  background: #6b5cff;
+  color: white;
+}
+
+.dark ::selection {
+  background: #6b5cff;
+  color: white;
+}
+
+/* Smooth Animations */
+@layer utilities {
+  .animate-in {
+    animation: slideIn 0.3s ease-out;
+  }
+  
+  .animate-out {
+    animation: slideOut 0.3s ease-in;
+  }
+  
+  .animate-fade-in {
+    animation: fadeIn 0.4s ease-out;
+  }
+  
+  .animate-scale-in {
+    animation: scaleIn 0.3s ease-out;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Button animations */
+@layer components {
+  .btn-primary {
+    @apply px-6 py-3 bg-brand-600 hover:bg-brand-500 text-white font-medium rounded-xl transition-all duration-200 hover:shadow-lg transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-none;
+  }
+  
+  .btn-secondary {
+    @apply px-6 py-3 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-medium rounded-xl transition-all duration-200 hover:shadow-md transform hover:scale-105 active:scale-95;
+  }
+  
+  .btn-danger {
+    @apply px-6 py-3 bg-red-600 hover:bg-red-500 text-white font-medium rounded-xl transition-all duration-200 hover:shadow-lg transform hover:scale-105 active:scale-95;
+  }
+  
+  .card {
+    @apply bg-white dark:bg-slate-800 rounded-xl p-6 border border-slate-200 dark:border-slate-700 transition-all duration-200 hover:shadow-lg;
+  }
+  
+  .input-field {
+    @apply w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all duration-200 outline-none;
+  }
+}
+
+/* Loading spinner */
+.spinner {
+  border: 3px solid rgba(107, 92, 255, 0.1);
+  border-top-color: #6b5cff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Focus visible styles for accessibility */
+*:focus-visible {
+  outline: 2px solid #6b5cff;
+  outline-offset: 2px;
+}
+
+/* Smooth page transitions */
+@layer utilities {
+  .page-transition {
+    animation: pageTransition 0.3s ease-out;
+  }
+}
+
+@keyframes pageTransition {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Modal animations */
+.modal-backdrop {
+  animation: backdropFadeIn 0.2s ease-out;
+}
+
+.modal-content {
+  animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes backdropFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Hover effects */
+.hover-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+}
+
+/* Gradient backgrounds */
+.gradient-bg {
+  background: linear-gradient(135deg, #6b5cff 0%, #3b2db8 100%);
+}
+
+.gradient-bg-subtle {
+  background: linear-gradient(135deg, rgba(107, 92, 255, 0.1) 0%, rgba(59, 45, 184, 0.05) 100%);
+}

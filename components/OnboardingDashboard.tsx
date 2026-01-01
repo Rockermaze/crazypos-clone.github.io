@@ -24,7 +24,7 @@ interface OnboardingTask {
 
 interface OnboardingDashboardProps {
   onSkipOnboarding: () => void
-  onCompleteOnboarding: () => void
+  onCompleteOnboarding: () => Promise<void>
   onOpenTask: (taskId: string) => void
 }
 
@@ -61,13 +61,6 @@ export default function OnboardingDashboard({
       title: 'Store Information',
       description: 'Configure your store settings and preferences',
       icon: '🏪',
-      isRequired: true
-    },
-    {
-      id: 'supplierConnection',
-      title: 'Connect to your supplier',
-      description: 'Link your supplier accounts for inventory management',
-      icon: '🔗',
       isRequired: false
     },
     {
@@ -78,16 +71,9 @@ export default function OnboardingDashboard({
       isRequired: false
     },
     {
-      id: 'paymentSettings',
-      title: 'Payments settings',
-      description: 'Set up payment gateways and processing options',
-      icon: '💳',
-      isRequired: true
-    },
-    {
       id: 'printingSettings',
       title: 'Printing settings',
-      description: 'Configure receipt and label printers',
+      description: 'Configure receipt and label printers - try demo',
       icon: '🖨️',
       isRequired: false
     },
@@ -96,7 +82,7 @@ export default function OnboardingDashboard({
       title: 'Add product',
       description: 'Add your first products to get started',
       icon: '📦',
-      isRequired: true
+      isRequired: false
     }
   ]
 
@@ -110,7 +96,6 @@ export default function OnboardingDashboard({
           setOnboardingStatus(data.onboardingStatus)
         }
       } catch (error) {
-        console.error('Error fetching onboarding status:', error)
         setNotification({ message: 'Failed to load onboarding status', type: 'error' })
       } finally {
         setLoading(false)
@@ -147,7 +132,6 @@ export default function OnboardingDashboard({
         throw new Error('Failed to update task status')
       }
     } catch (error) {
-      console.error('Error updating task status:', error)
       setNotification({ message: 'Failed to update task status', type: 'error' })
     }
   }
@@ -168,7 +152,6 @@ export default function OnboardingDashboard({
         throw new Error('Failed to skip onboarding')
       }
     } catch (error) {
-      console.error('Error skipping onboarding:', error)
       setNotification({ message: 'Failed to skip onboarding', type: 'error' })
     }
   }
@@ -313,7 +296,21 @@ export default function OnboardingDashboard({
             
             <div className="flex gap-3">
               <button
-                onClick={onCompleteOnboarding}
+                onClick={async () => {
+                  if (allRequiredCompleted) {
+                    // Mark onboarding as completed
+                    try {
+                      await fetch('/api/onboarding', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ task: 'completed', completed: true })
+                      })
+                      await onCompleteOnboarding()
+                    } catch (error) {
+                      setNotification({ message: 'Failed to complete onboarding', type: 'error' })
+                    }
+                  }
+                }}
                 disabled={!allRequiredCompleted}
                 className={`px-6 py-3 font-medium rounded-lg transition-colors ${
                   allRequiredCompleted

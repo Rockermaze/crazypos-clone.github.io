@@ -87,6 +87,16 @@ export async function PATCH(request, { params }) {
         return NextResponse.json({ error: 'Invalid status value' }, { status: 400 })
       }
       
+      // Prevent picked-up status without full payment
+      if (body.status === 'picked-up') {
+        const currentPaymentStatus = body.paymentStatus || existingRepair.paymentStatus
+        if (currentPaymentStatus !== 'paid') {
+          return NextResponse.json({ 
+            error: 'Payment must be completed before customer can pick up the device' 
+          }, { status: 400 })
+        }
+      }
+      
       updateData.status = body.status
 
       // Set actual completion date when marking as completed
@@ -119,6 +129,40 @@ export async function PATCH(request, { params }) {
 
     if (body.partsUsed) {
       updateData.partsUsed = body.partsUsed
+    }
+
+    // Handle payment updates
+    if (body.paymentStatus !== undefined) {
+      const validPaymentStatuses = ['unpaid', 'partial', 'paid']
+      if (!validPaymentStatuses.includes(body.paymentStatus)) {
+        return NextResponse.json({ error: 'Invalid payment status' }, { status: 400 })
+      }
+      updateData.paymentStatus = body.paymentStatus
+      
+      // Set payment date when marking as paid
+      if (body.paymentStatus === 'paid' && !existingRepair.paymentDate) {
+        updateData.paymentDate = new Date()
+      }
+    }
+
+    if (body.paidAmount !== undefined) {
+      updateData.paidAmount = parseFloat(body.paidAmount)
+    }
+
+    if (body.paymentMethod) {
+      const validMethods = ['cash', 'card', 'upi', 'bank-transfer', 'other']
+      if (!validMethods.includes(body.paymentMethod)) {
+        return NextResponse.json({ error: 'Invalid payment method' }, { status: 400 })
+      }
+      updateData.paymentMethod = body.paymentMethod
+    }
+
+    if (body.paymentNotes !== undefined) {
+      updateData.paymentNotes = body.paymentNotes.trim()
+    }
+
+    if (body.paymentDate) {
+      updateData.paymentDate = new Date(body.paymentDate)
     }
 
     // Update the repair ticket

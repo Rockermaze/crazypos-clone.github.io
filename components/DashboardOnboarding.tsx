@@ -56,27 +56,6 @@ export default function DashboardOnboarding({ onOpenTask, onGoToPOS }: Dashboard
       title: 'Store Information',
       description: 'Configure store settings',
       icon: '🏪',
-      isRequired: true
-    },
-    {
-      id: 'paymentSettings',
-      title: 'Payment Settings',
-      description: 'Connect payment gateway',
-      icon: '💳',
-      isRequired: true
-    },
-    {
-      id: 'addProduct',
-      title: 'Add Product',
-      description: 'Add your first products',
-      icon: '📦',
-      isRequired: true
-    },
-    {
-      id: 'supplierConnection',
-      title: 'Connect Supplier',
-      description: 'Link supplier accounts',
-      icon: '🔗',
       isRequired: false
     },
     {
@@ -89,8 +68,15 @@ export default function DashboardOnboarding({ onOpenTask, onGoToPOS }: Dashboard
     {
       id: 'printingSettings',
       title: 'Printing Settings',
-      description: 'Set up printers',
+      description: 'Set up printers - try demo',
       icon: '🖨️',
+      isRequired: false
+    },
+    {
+      id: 'addProduct',
+      title: 'Add Product',
+      description: 'Add your first products',
+      icon: '📦',
       isRequired: false
     }
   ]
@@ -105,7 +91,6 @@ export default function DashboardOnboarding({ onOpenTask, onGoToPOS }: Dashboard
           setOnboardingStatus(data.onboardingStatus)
         }
       } catch (error) {
-        console.error('Error fetching onboarding status:', error)
         setNotification({ message: 'Failed to load setup status', type: 'error' })
       } finally {
         setLoading(false)
@@ -140,7 +125,6 @@ export default function DashboardOnboarding({ onOpenTask, onGoToPOS }: Dashboard
         })
       }
     } catch (error) {
-      console.error('Error updating task status:', error)
       setNotification({ message: 'Failed to update task', type: 'error' })
     }
   }
@@ -159,7 +143,6 @@ export default function DashboardOnboarding({ onOpenTask, onGoToPOS }: Dashboard
         }, 1500)
       }
     } catch (error) {
-      console.error('Error skipping onboarding:', error)
       setNotification({ message: 'Failed to skip setup', type: 'error' })
     }
   }
@@ -324,7 +307,21 @@ export default function DashboardOnboarding({ onOpenTask, onGoToPOS }: Dashboard
           </button>
           
           <button
-            onClick={onGoToPOS}
+            onClick={async () => {
+              if (allRequiredCompleted) {
+                // Mark onboarding as completed
+                try {
+                  await fetch('/api/onboarding', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ task: 'completed', completed: true })
+                  })
+                  onGoToPOS()
+                } catch (error) {
+                  setNotification({ message: 'Failed to complete setup', type: 'error' })
+                }
+              }
+            }}
             disabled={!allRequiredCompleted}
             className={`px-6 py-3 font-medium rounded-lg transition-colors ${
               allRequiredCompleted

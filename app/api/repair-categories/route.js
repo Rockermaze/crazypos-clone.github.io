@@ -31,9 +31,9 @@ export async function POST(request) {
     const body = await request.json()
     const { name, description, estimatedCost, estimatedTime } = body
 
-    if (!name || !estimatedCost || !estimatedTime) {
+    if (!name || !estimatedTime) {
       return NextResponse.json({ 
-        error: 'Name, estimated cost, and estimated time are required' 
+        error: 'Name and estimated time are required' 
       }, { status: 400 })
     }
 
@@ -54,7 +54,7 @@ export async function POST(request) {
     const category = new RepairCategory({
       name,
       description,
-      estimatedCost: parseFloat(estimatedCost),
+      estimatedCost: estimatedCost ? parseFloat(estimatedCost) : 0,
       estimatedTime: parseInt(estimatedTime)
     })
 

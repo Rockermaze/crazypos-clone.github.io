@@ -87,7 +87,10 @@ export async function POST(request) {
     paymentGateway,
     customerInfo,
     customerId,
-    stripeData
+    stripeData,
+    dueAmount, // Amount to be added to customer's due
+    existingDuePaid, // Amount of existing due being paid in this transaction
+    invoicePreferences // {emailInvoice: boolean, printInvoice: boolean}
   } = body
 
     // Validate required fields
@@ -194,6 +197,25 @@ export async function POST(request) {
         const customer = await Customer.findById(linkedCustomerId)
         if (customer) {
           await customer.addPurchase(savedSale._id, savedSale.total, savedSale.receiptNumber)
+          
+          // If existing due was paid in this transaction, deduct it
+          if (existingDuePaid && existingDuePaid > 0) {
+            const paidAmount = Math.min(existingDuePaid, customer.dueAmount)
+            if (paidAmount > 0) {
+              customer.dueAmount = Math.max(0, customer.dueAmount - paidAmount)
+              customer.notes = customer.notes 
+                ? `${customer.notes}\n[${new Date().toISOString()}] Paid $${paidAmount.toFixed(2)} of existing due via ${savedSale.receiptNumber}` 
+                : `[${new Date().toISOString()}] Paid $${paidAmount.toFixed(2)} of existing due via ${savedSale.receiptNumber}`
+              await customer.save()
+              console.log(`✅ Deducted $${paidAmount} from customer ${customer.customerId} due (was $${(customer.dueAmount + paidAmount).toFixed(2)}, now $${customer.dueAmount.toFixed(2)})`)
+            }
+          }
+          
+          // If there's a new due amount from partial payment, add it to customer's due balance
+          if (dueAmount && dueAmount > 0) {
+            await customer.addDue(dueAmount, `Sale ${savedSale.receiptNumber} - Partial payment`)
+            console.log(`✅ Added due amount $${dueAmount} to customer ${customer.customerId}`)
+          }
         }
       } catch (custErr) {
         console.error('Warning: Failed to update customer purchase history:', custErr)
@@ -342,9 +364,9 @@ export async function POST(request) {
       // Do not fail the sale creation if transaction creation fails
     }
 
-    // Send invoice email if customer email is provided
+    // Send invoice email ONLY if customer email is provided AND emailInvoice checkbox is checked
     let emailStatus = null
-    if (customerInfo?.email) {
+    if (customerInfo?.email && invoicePreferences?.emailInvoice) {
       try {
         console.log('📧 Starting email process for customer:', customerInfo.email)
         

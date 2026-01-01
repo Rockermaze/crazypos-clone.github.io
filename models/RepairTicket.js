@@ -155,6 +155,30 @@ const repairTicketSchema = new mongoose.Schema({
   },
   actualCompletion: {
     type: Date
+  },
+  paymentStatus: {
+    type: String,
+    enum: ['unpaid', 'partial', 'paid'],
+    default: 'unpaid'
+  },
+  paidAmount: {
+    type: Number,
+    min: [0, 'Paid amount cannot be negative'],
+    default: 0
+  },
+  paymentMethod: {
+    type: String,
+    enum: ['cash', 'card', 'upi', 'bank-transfer', 'other'],
+    trim: true
+  },
+  paymentDate: {
+    type: Date
+  },
+  paymentNotes: {
+    type: String,
+    trim: true,
+    maxlength: [500, 'Payment notes cannot be more than 500 characters'],
+    default: ''
   }
 }, {
   timestamps: true

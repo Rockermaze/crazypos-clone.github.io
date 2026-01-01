@@ -40,7 +40,7 @@ export function RepairCategoriesSection({ onCategoryChange }: RepairCategoriesSe
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!formData.name || !formData.estimatedCost || !formData.estimatedTime) {
+    if (!formData.name || !formData.estimatedTime) {
       setNotification({ message: 'Please fill in all required fields', type: 'error' })
       return
     }
@@ -58,7 +58,7 @@ export function RepairCategoriesSection({ onCategoryChange }: RepairCategoriesSe
         body: JSON.stringify({
           name: formData.name,
           description: formData.description,
-          estimatedCost: parseFloat(formData.estimatedCost),
+          estimatedCost: formData.estimatedCost ? parseFloat(formData.estimatedCost) : 0,
           estimatedTime: parseInt(formData.estimatedTime)
         })
       })
@@ -195,12 +195,6 @@ export function RepairCategoriesSection({ onCategoryChange }: RepairCategoriesSe
               
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-500 dark:text-slate-400">Estimated Cost:</span>
-                  <span className="font-medium text-brand-700 dark:text-brand-400">
-                    ${category.estimatedCost.toFixed(2)}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
                   <span className="text-slate-500 dark:text-slate-400">Estimated Time:</span>
                   <span className="font-medium text-slate-900 dark:text-slate-100">
                     {formatTime(category.estimatedTime)}
@@ -247,35 +241,21 @@ export function RepairCategoriesSection({ onCategoryChange }: RepairCategoriesSe
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                    Estimated Cost * ($)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formData.estimatedCost}
-                    onChange={(e) => setFormData(prev => ({ ...prev, estimatedCost: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-3 py-2 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                    placeholder="50.00"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                    Time * (minutes)
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={formData.estimatedTime}
-                    onChange={(e) => setFormData(prev => ({ ...prev, estimatedTime: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-3 py-2 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                    placeholder="60"
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  Estimated Time * (minutes)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={formData.estimatedTime}
+                  onChange={(e) => setFormData(prev => ({ ...prev, estimatedTime: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-3 py-2 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  placeholder="60"
+                />
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  How long this type of repair typically takes
+                </p>
               </div>
 
               <div className="flex gap-3 pt-4">

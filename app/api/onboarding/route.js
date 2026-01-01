@@ -34,9 +34,8 @@ export async function GET() {
       }
     })
   } catch (error) {
-    console.error('Error fetching onboarding status:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Failed to fetch onboarding status' },
       { status: 500 }
     )
   }
@@ -101,9 +100,8 @@ export async function POST(request) {
       onboardingStatus: user.onboardingStatus
     })
   } catch (error) {
-    console.error('Error updating onboarding status:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Failed to update onboarding status' },
       { status: 500 }
     )
   }
@@ -139,9 +137,8 @@ export async function PUT(request) {
       onboardingStatus: user.onboardingStatus
     })
   } catch (error) {
-    console.error('Error skipping onboarding:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Failed to skip onboarding' },
       { status: 500 }
     )
   }

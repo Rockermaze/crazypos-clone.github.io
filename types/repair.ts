@@ -53,6 +53,11 @@ export interface RepairTicket {
   dateReceived: Date
   estimatedCompletionDate?: Date
   actualCompletionDate?: Date
+  paymentStatus: 'unpaid' | 'partial' | 'paid'
+  paidAmount: number
+  paymentMethod?: 'cash' | 'card' | 'upi' | 'bank-transfer' | 'other'
+  paymentDate?: Date
+  paymentNotes?: string
   createdAt: Date
   updatedAt: Date
 }

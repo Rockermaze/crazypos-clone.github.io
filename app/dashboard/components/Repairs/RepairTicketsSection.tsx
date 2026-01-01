@@ -1,18 +1,49 @@
 'use client'
 import { useState } from 'react'
 import type { RepairTicket, RepairTicketsSectionProps } from '@/types/repair'
+import { RepairPaymentModal } from '@/components/RepairPaymentModal'
 
 export function RepairTicketsSection({ repairs, onAddRepair, onUpdateRepairStatus }: RepairTicketsSectionProps) {
   const [updatingRepair, setUpdatingRepair] = useState<string | null>(null)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [selectedRepair, setSelectedRepair] = useState<RepairTicket | null>(null)
 
   const handleStatusUpdate = async (repairId: string, status: RepairTicket['status']) => {
     setUpdatingRepair(repairId)
     try {
       await onUpdateRepairStatus(repairId, status)
+    } catch (error: any) {
+      // Error is handled by parent component
     } finally {
       setUpdatingRepair(null)
     }
   }
+
+  const handlePaymentClick = (repair: RepairTicket) => {
+    setSelectedRepair(repair)
+    setShowPaymentModal(true)
+  }
+
+  const handlePaymentSave = async (paymentData: {
+    paymentStatus: 'unpaid' | 'partial' | 'paid'
+    paidAmount: number
+    paymentMethod: 'cash' | 'card' | 'upi' | 'bank-transfer' | 'other'
+    paymentNotes: string
+  }) => {
+    if (!selectedRepair) return
+    
+    setUpdatingRepair(selectedRepair.id)
+    try {
+      await onUpdateRepairStatus(selectedRepair.id, selectedRepair.status, paymentData)
+      setShowPaymentModal(false)
+      setSelectedRepair(null)
+    } catch (error: any) {
+      // Error is handled by parent component
+    } finally {
+      setUpdatingRepair(null)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -50,7 +81,7 @@ export function RepairTicketsSection({ repairs, onAddRepair, onUpdateRepairStatu
                   <th className="text-left py-3 px-4 text-slate-900 dark:text-slate-100 font-semibold">Issue</th>
                   <th className="text-left py-3 px-4 text-slate-900 dark:text-slate-100 font-semibold">Status</th>
                   <th className="text-left py-3 px-4 text-slate-900 dark:text-slate-100 font-semibold">Priority</th>
-                  <th className="text-left py-3 px-4 text-slate-900 dark:text-slate-100 font-semibold">Est. Cost</th>
+                  <th className="text-left py-3 px-4 text-slate-900 dark:text-slate-100 font-semibold">Cost & Payment</th>
                   <th className="text-left py-3 px-4 text-slate-900 dark:text-slate-100 font-semibold">Date</th>
                   <th className="text-left py-3 px-4 text-slate-900 dark:text-slate-100 font-semibold">Actions</th>
                 </tr>
@@ -114,7 +145,20 @@ export function RepairTicketsSection({ repairs, onAddRepair, onUpdateRepairStatu
                         {repair.priority.toUpperCase()}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-slate-900 dark:text-slate-100 font-medium">${repair.estimatedCost.toFixed(2)}</td>
+                    <td className="py-3 px-4">
+                      <div className="space-y-1">
+                        <p className="text-slate-900 dark:text-slate-100 font-medium">${repair.estimatedCost.toFixed(2)}</p>
+                        <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
+                          repair.paymentStatus === 'paid' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
+                          repair.paymentStatus === 'partial' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400' :
+                          'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                        }`}>
+                          {repair.paymentStatus === 'paid' ? '✓ Paid' : 
+                           repair.paymentStatus === 'partial' ? `Partial ($${repair.paidAmount.toFixed(2)})` : 
+                           'Unpaid'}
+                        </span>
+                      </div>
+                    </td>
                     <td className="py-3 px-4 text-sm text-slate-600 dark:text-slate-400">
                       <div>
                         <div>{new Date(repair.dateReceived).toLocaleDateString()}</div>
@@ -126,15 +170,15 @@ export function RepairTicketsSection({ repairs, onAddRepair, onUpdateRepairStatu
                       </div>
                     </td>
                     <td className="py-3 px-4">
-                      <div className="flex gap-2">
-                        {repair.status !== 'completed' && repair.status !== 'cancelled' && (
+                      <div className="flex flex-wrap gap-2">
+                        {repair.status !== 'completed' && repair.status !== 'cancelled' && repair.status !== 'picked-up' && (
                           <button
                             onClick={() => handleStatusUpdate(repair.id, 'completed')}
                             disabled={updatingRepair === repair.id}
                             className="bg-green-100 hover:bg-green-200 disabled:bg-green-50 disabled:text-green-400 text-green-800 px-3 py-1 rounded-full text-xs font-medium transition-colors dark:bg-green-900/30 dark:hover:bg-green-900/50 dark:text-green-400 dark:disabled:bg-green-900/10 dark:disabled:text-green-600"
                             title="Mark as Complete"
                           >
-                            {updatingRepair === repair.id ? '⏳ ...' : '✓ Complete'}
+                            {updatingRepair === repair.id ? '⏳' : '✓ Complete'}
                           </button>
                         )}
                         {repair.status === 'pending' && (
@@ -144,7 +188,7 @@ export function RepairTicketsSection({ repairs, onAddRepair, onUpdateRepairStatu
                             className="bg-blue-100 hover:bg-blue-200 disabled:bg-blue-50 disabled:text-blue-400 text-blue-800 px-3 py-1 rounded-full text-xs font-medium transition-colors dark:bg-blue-900/30 dark:hover:bg-blue-900/50 dark:text-blue-400 dark:disabled:bg-blue-900/10 dark:disabled:text-blue-600"
                             title="Start Repair"
                           >
-                            {updatingRepair === repair.id ? '⏳ ...' : '▶ Start'}
+                            {updatingRepair === repair.id ? '⏳' : '▶ Start'}
                           </button>
                         )}
                         {repair.status === 'in-progress' && (
@@ -154,17 +198,27 @@ export function RepairTicketsSection({ repairs, onAddRepair, onUpdateRepairStatu
                             className="bg-yellow-100 hover:bg-yellow-200 disabled:bg-yellow-50 disabled:text-yellow-400 text-yellow-800 px-3 py-1 rounded-full text-xs font-medium transition-colors dark:bg-yellow-900/30 dark:hover:bg-yellow-900/50 dark:text-yellow-400 dark:disabled:bg-yellow-900/10 dark:disabled:text-yellow-600"
                             title="Waiting for Parts"
                           >
-                            {updatingRepair === repair.id ? '⏳ ...' : '⏸ Parts'}
+                            {updatingRepair === repair.id ? '⏳' : '⏸ Parts'}
                           </button>
                         )}
-                        {repair.status === 'completed' && (
+                        {repair.status === 'completed' && repair.paymentStatus !== 'paid' && (
+                          <button
+                            onClick={() => handlePaymentClick(repair)}
+                            disabled={updatingRepair === repair.id}
+                            className="bg-blue-100 hover:bg-blue-200 disabled:bg-blue-50 disabled:text-blue-400 text-blue-800 px-3 py-1 rounded-full text-xs font-medium transition-colors dark:bg-blue-900/30 dark:hover:bg-blue-900/50 dark:text-blue-400 dark:disabled:bg-blue-900/10 dark:disabled:text-blue-600"
+                            title="Record Payment"
+                          >
+                            💳 Payment
+                          </button>
+                        )}
+                        {repair.status === 'completed' && repair.paymentStatus === 'paid' && (
                           <button
                             onClick={() => handleStatusUpdate(repair.id, 'picked-up')}
                             disabled={updatingRepair === repair.id}
                             className="bg-purple-100 hover:bg-purple-200 disabled:bg-purple-50 disabled:text-purple-400 text-purple-800 px-3 py-1 rounded-full text-xs font-medium transition-colors dark:bg-purple-900/30 dark:hover:bg-purple-900/50 dark:text-purple-400 dark:disabled:bg-purple-900/10 dark:disabled:text-purple-600"
                             title="Mark as Picked Up"
                           >
-                            {updatingRepair === repair.id ? '⏳ ...' : '📦 Picked Up'}
+                            {updatingRepair === repair.id ? '⏳' : '📦 Picked Up'}
                           </button>
                         )}
                       </div>
@@ -175,6 +229,19 @@ export function RepairTicketsSection({ repairs, onAddRepair, onUpdateRepairStatu
             </table>
           </div>
         </div>
+      )}
+
+      {/* Payment Modal */}
+      {showPaymentModal && selectedRepair && (
+        <RepairPaymentModal
+          isOpen={showPaymentModal}
+          onClose={() => {
+            setShowPaymentModal(false)
+            setSelectedRepair(null)
+          }}
+          onSave={handlePaymentSave}
+          repair={selectedRepair}
+        />
       )}
     </div>
   )

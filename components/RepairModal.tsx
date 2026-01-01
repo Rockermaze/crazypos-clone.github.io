@@ -120,13 +120,12 @@ export function RepairModal({ isOpen, onClose, onSave, repair }: RepairModalProp
         deviceInfo: { ...prev.deviceInfo, [field]: value }
       }))
     } else if (name === 'categoryId') {
-      // Handle category selection
+      // Handle category selection - no auto-fill of price
       const selectedCategory = repairCategories.find(cat => cat._id === value)
       setFormData(prev => ({
         ...prev,
         categoryId: value,
-        categoryName: selectedCategory?.name || '',
-        estimatedCost: selectedCategory?.estimatedCost || prev.estimatedCost
+        categoryName: selectedCategory?.name || ''
       }))
     } else {
       setFormData(prev => ({
@@ -253,7 +252,7 @@ export function RepairModal({ isOpen, onClose, onSave, repair }: RepairModalProp
                 <option value="">Select a repair category (optional)</option>
                 {repairCategories.map(category => (
                   <option key={category._id} value={category._id}>
-                    {category.name} - ${category.estimatedCost.toFixed(2)}
+                    {category.name}
                   </option>
                 ))}
               </select>

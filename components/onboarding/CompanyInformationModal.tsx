@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Modal } from '@/components/Modal'
 
 interface CompanyInformationModalProps {
@@ -37,7 +37,31 @@ export function CompanyInformationModal({ isOpen, onClose, onComplete }: Company
     taxId: ''
   })
   const [loading, setLoading] = useState(false)
+  const [initialLoading, setInitialLoading] = useState(true)
   const [error, setError] = useState('')
+
+  // Load existing settings when modal opens
+  useEffect(() => {
+    const loadSettings = async () => {
+      if (!isOpen) return
+      
+      try {
+        const response = await fetch('/api/user-settings')
+        if (response.ok) {
+          const data = await response.json()
+          if (data.settings?.companyInformation) {
+            setFormData(prev => ({ ...prev, ...data.settings.companyInformation }))
+          }
+        }
+      } catch (error) {
+        // Silently fail - user can still enter data
+      } finally {
+        setInitialLoading(false)
+      }
+    }
+    
+    loadSettings()
+  }, [isOpen])
 
   const handleInputChange = (field: keyof CompanyData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -64,9 +88,18 @@ export function CompanyInformationModal({ isOpen, onClose, onComplete }: Company
     setError('')
 
     try {
-      // Here you would typically save to your user profile or company settings
-      // For now, we'll just simulate an API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      // Save company information to user settings
+      const response = await fetch('/api/user-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyInformation: formData
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to save company information')
+      }
       
       // Mark this task as completed
       await fetch('/api/onboarding', {

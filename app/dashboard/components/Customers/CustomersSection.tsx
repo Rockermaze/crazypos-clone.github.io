@@ -430,7 +430,9 @@ export function CustomersSection({ onNotification }: CustomersSectionProps) {
                 customers.map((customer) => (
                   <tr
                     key={customer.id}
-                    className="hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer transition-colors"
+                    className={`hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer transition-colors ${
+                      customer.dueAmount > 0 ? 'bg-red-50/30 dark:bg-red-900/10 border-l-4 border-red-500' : ''
+                    }`}
                     onClick={() => loadCustomerDetails(customer.id)}
                   >
                     <td className="px-4 py-3 text-sm text-slate-900 dark:text-slate-100 font-mono">

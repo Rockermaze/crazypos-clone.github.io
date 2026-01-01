@@ -14,8 +14,9 @@ const repairCategorySchema = new mongoose.Schema({
   },
   estimatedCost: {
     type: Number,
-    required: [true, 'Estimated cost is required'],
-    min: [0, 'Estimated cost cannot be negative']
+    required: false,
+    min: [0, 'Estimated cost cannot be negative'],
+    default: 0
   },
   estimatedTime: {
     type: Number,

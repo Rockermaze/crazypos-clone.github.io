@@ -13,7 +13,9 @@ import type { RepairTicket } from '@/types/repair'
 import { DashboardHeader } from '@/components/DashboardHeader'
 import DashboardOnboarding from '@/components/DashboardOnboarding'
 import { CompanyInformationModal } from '@/components/onboarding/CompanyInformationModal'
-import { PaymentSettingsModal } from '@/components/onboarding/PaymentSettingsModal'
+import { StoreInformationModal } from '@/components/onboarding/StoreInformationModal'
+import { EmailSettingsModal } from '@/components/onboarding/EmailSettingsModal'
+import { PrintingSettingsModal } from '@/components/onboarding/PrintingSettingsModal'
 import { InvoiceSuccessModal } from '@/components/InvoiceSuccessModal'
 import { PrintableInvoice } from '@/components/PrintableInvoice'
 
@@ -61,6 +63,7 @@ export default function DashboardPage() {
   // UI states
   const [loading, setLoading] = useState(true)
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'warning' } | null>(null)
+  const [customerRefreshKey, setCustomerRefreshKey] = useState(0)
 
   // Authentication redirect effect
   useEffect(() => {
@@ -170,6 +173,34 @@ export default function DashboardPage() {
     setShowOnboarding(true)
   }
 
+  const handleCompleteOnboarding = async () => {
+    setShowOnboarding(false)
+    setShowPOS(true)
+    
+    // Load POS data
+    try {
+      const [productsData, salesData, repairsData, settingsData] = await Promise.all([
+        APIDataManager.getProducts(),
+        APIDataManager.getSales(),
+        APIDataManager.getRepairs(),
+        fetch('/api/settings').then(res => res.ok ? res.json().then(data => data.settings) : null).catch(() => null)
+      ])
+      setProducts(productsData)
+      setSales(salesData)
+      setRepairs(repairsData)
+      if (settingsData) {
+        setSettings(settingsData)
+      }
+      
+      setNotification({ 
+        message: '🎉 Setup complete! Welcome to your POS dashboard.', 
+        type: 'success' 
+      })
+    } catch (error) {
+      setNotification({ message: 'Failed to load dashboard data', type: 'error' })
+    }
+  }
+
   const handleOpenOnboardingTask = (taskId: string) => {
     setActiveOnboardingModal(taskId)
   }
@@ -178,13 +209,30 @@ export default function DashboardPage() {
     setActiveOnboardingModal(null)
   }
 
-  const handleOnboardingTaskComplete = () => {
+  const handleOnboardingTaskComplete = async () => {
     setActiveOnboardingModal(null)
-    // Refresh onboarding status
-    fetch('/api/onboarding')
-      .then(res => res.json())
-      .then(data => setOnboardingStatus(data.onboardingStatus))
-      .catch(console.error)
+    
+    try {
+      // Refresh onboarding status
+      const response = await fetch('/api/onboarding')
+      if (response.ok) {
+        const data = await response.json()
+        setOnboardingStatus(data.onboardingStatus)
+        
+        // Check if all required tasks are now complete
+        const requiredTasksComplete = data.onboardingStatus.companyInformation
+        
+        // If required tasks are complete and user hasn't explicitly skipped, enable POS
+        if (requiredTasksComplete && !showPOS) {
+          setNotification({ 
+            message: 'Great! You can now access the POS system.', 
+            type: 'success' 
+          })
+        }
+      }
+    } catch (error) {
+      setNotification({ message: 'Failed to update status', type: 'error' })
+    }
   }
 
   // Early returns after all hooks are defined
@@ -382,7 +430,11 @@ export default function DashboardPage() {
         discount: paymentData.discount,
         total: paymentData.total,
         paymentMethod: paymentData.paymentMethod,
-        customerInfo: paymentData.customerInfo
+        customerInfo: paymentData.customerInfo,
+        customerId: paymentData.customerId,
+        dueAmount: paymentData.dueAmount,
+        existingDuePaid: paymentData.existingDuePaid,
+        invoicePreferences: paymentData.invoicePreferences
       }
 
       const response = await fetch('/api/sales', {
@@ -409,6 +461,11 @@ export default function DashboardPage() {
         
         setSales(updatedSales)
         setProducts(updatedProducts)
+        
+        // Trigger customer refresh if due payment was made or existing due was paid
+        if ((paymentData.dueAmount && paymentData.dueAmount > 0) || (paymentData.existingDuePaid && paymentData.existingDuePaid > 0)) {
+          setCustomerRefreshKey(prev => prev + 1)
+        }
         
         // Clear cart
         setCart([])
@@ -580,7 +637,7 @@ export default function DashboardPage() {
                       <div className="flex items-center gap-1">
                         <div className="w-2 h-2 rounded-full bg-orange-400"></div>
                         <span className="text-xs text-orange-600 dark:text-orange-400">
-                          {Object.values(onboardingStatus).filter(Boolean).length - 2}/7
+                          {Object.values(onboardingStatus).filter(Boolean).length - 2}/5
                         </span>
                       </div>
                     )}
@@ -654,6 +711,7 @@ export default function DashboardPage() {
 
           {(activeTab === 'customers' && showPOS) && (
             <CustomersSection
+              key={customerRefreshKey}
               onNotification={(message, type) => setNotification({ message, type })}
             />
           )}
@@ -787,28 +845,39 @@ export default function DashboardPage() {
         />
       )}
       
-      {activeOnboardingModal === 'paymentSettings' && (
-        <PaymentSettingsModal
+      {activeOnboardingModal === 'storeInformation' && (
+        <StoreInformationModal
           isOpen={true}
           onClose={handleCloseOnboardingModal}
           onComplete={handleOnboardingTaskComplete}
         />
       )}
       
-      {/* Placeholder modals for other tasks */}
-      {(activeOnboardingModal === 'storeInformation' || 
-        activeOnboardingModal === 'supplierConnection' ||
-        activeOnboardingModal === 'emailSettings' ||
-        activeOnboardingModal === 'printingSettings' ||
-        activeOnboardingModal === 'addProduct') && (
+      {activeOnboardingModal === 'emailSettings' && (
+        <EmailSettingsModal
+          isOpen={true}
+          onClose={handleCloseOnboardingModal}
+          onComplete={handleOnboardingTaskComplete}
+        />
+      )}
+      
+      {activeOnboardingModal === 'printingSettings' && (
+        <PrintingSettingsModal
+          isOpen={true}
+          onClose={handleCloseOnboardingModal}
+          onComplete={handleOnboardingTaskComplete}
+        />
+      )}
+      
+      {/* Add Product Modal - Simple Placeholder */}
+      {activeOnboardingModal === 'addProduct' && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-slate-800 p-6 rounded-xl max-w-md mx-4">
-            <h3 className="text-lg font-semibold mb-4 capitalize">
-              {activeOnboardingModal?.replace(/([A-Z])/g, ' $1').trim()}
+            <h3 className="text-lg font-semibold mb-4">
+              Add Your First Product
             </h3>
             <p className="text-slate-600 dark:text-slate-400 mb-4">
-              This setup task will be implemented with full functionality.
-              For now, you can mark it as complete to continue.
+              You can add products from the Inventory tab after completing the setup, or mark this step as complete to continue.
             </p>
             <div className="flex justify-end gap-2">
               <button

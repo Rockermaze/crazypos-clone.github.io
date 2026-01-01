@@ -31,6 +31,7 @@ export interface PaymentData {
   paymentGateway?: 'MANUAL' | 'STRIPE'
   amountPaid: number
   change: number
+  dueAmount?: number // Amount to be added to customer's due
   customerId?: string
   customerInfo?: {
     name?: string
@@ -153,15 +154,6 @@ export function PaymentModal({ isOpen, onClose, onPaymentComplete, cartItems, to
   const { data: session } = useSession()
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'ONLINE' | 'DEBIT_CARD' | 'CREDIT_CARD' | 'STORE_CREDIT' | 'STRIPE'>('CASH')
   const [discount, setDiscount] = useState(0)
-  
-  // Calculate tax and final total
-  const taxRate = 0.0825 // 8.25% - should come from settings
-  const subtotal = total
-  const discountAmount = (subtotal * discount) / 100
-  const taxAmount = (subtotal - discountAmount) * taxRate
-  const finalTotal = subtotal - discountAmount + taxAmount
-  
-  const [amountPaid, setAmountPaid] = useState(finalTotal)
   const [customerInfo, setCustomerInfo] = useState({
     name: '',
     email: '',
@@ -180,6 +172,20 @@ export function PaymentModal({ isOpen, onClose, onPaymentComplete, cartItems, to
   // Invoice preferences
   const [emailInvoice, setEmailInvoice] = useState(false)
   const [printInvoice, setPrintInvoice] = useState(false)
+  // Include customer due in transaction
+  const [includeDueInTransaction, setIncludeDueInTransaction] = useState(false)
+  
+  // Calculate tax and final total (rounded to 2 decimals)
+  const taxRate = 0.0825 // 8.25% - should come from settings
+  const subtotal = parseFloat(total.toFixed(2))
+  const discountAmount = parseFloat(((subtotal * discount) / 100).toFixed(2))
+  const taxAmount = parseFloat(((subtotal - discountAmount) * taxRate).toFixed(2))
+  const baseTotal = parseFloat((subtotal - discountAmount + taxAmount).toFixed(2))
+  // Add existing due if option is selected
+  const existingDue = includeDueInTransaction && selectedCustomer?.dueAmount > 0 ? selectedCustomer.dueAmount : 0
+  const finalTotal = parseFloat((baseTotal + existingDue).toFixed(2))
+  
+  const [amountPaid, setAmountPaid] = useState(finalTotal)
   // QR state
   const [qrLoading, setQrLoading] = useState(false)
   const [qrError, setQrError] = useState('')
@@ -284,11 +290,11 @@ export function PaymentModal({ isOpen, onClose, onPaymentComplete, cartItems, to
     }
   }
   
-  const change = paymentMethod === 'CASH' ? Math.max(0, amountPaid - finalTotal) : 0
+  const change = paymentMethod === 'CASH' ? parseFloat(Math.max(0, amountPaid - finalTotal).toFixed(2)) : 0
   
   // Update amountPaid when finalTotal changes (due to discount changes)
   useEffect(() => {
-    setAmountPaid(finalTotal)
+    setAmountPaid(parseFloat(finalTotal.toFixed(2)))
   }, [finalTotal])
 
   // Stripe payment handlers
@@ -393,16 +399,18 @@ export function PaymentModal({ isOpen, onClose, onPaymentComplete, cartItems, to
   const handlePaymentComplete = () => {
 
     const paymentData: PaymentData = {
-      subtotal,
-      tax: taxAmount,
-      discount: discountAmount,
-      total: finalTotal,
+      subtotal: parseFloat(subtotal.toFixed(2)),
+      tax: parseFloat(taxAmount.toFixed(2)),
+      discount: parseFloat(discountAmount.toFixed(2)),
+      total: parseFloat(finalTotal.toFixed(2)),
       paymentMethod,
       paymentGateway: 'MANUAL',
-      amountPaid: paymentMethod === 'CASH' ? amountPaid : finalTotal,
-      change,
+      amountPaid: parseFloat((paymentMethod === 'CASH' ? amountPaid : finalTotal).toFixed(2)),
+      change: parseFloat(change.toFixed(2)),
+      dueAmount: dueAmount > 0 ? parseFloat(dueAmount.toFixed(2)) : undefined, // Add due amount if exists
       customerInfo: customerInfo.name || customerInfo.email || customerInfo.phone ? customerInfo : undefined,
       customerId: selectedCustomer?.id,
+      existingDuePaid: existingDue > 0 ? parseFloat(existingDue.toFixed(2)) : undefined, // Track if existing due was included
       invoicePreferences: {
         emailInvoice,
         printInvoice
@@ -412,10 +420,18 @@ export function PaymentModal({ isOpen, onClose, onPaymentComplete, cartItems, to
     onPaymentComplete(paymentData)
   }
 
+  // Calculate due amount if insufficient payment (rounded to 2 decimals)
+  const dueAmount = paymentMethod === 'CASH' && amountPaid < finalTotal ? parseFloat((finalTotal - amountPaid).toFixed(2)) : 0
+  
+  // Allow due payments for known customers only
   const isValidPayment = (
-    paymentMethod !== 'CASH' || 
-    amountPaid >= finalTotal
+    paymentMethod !== 'CASH' || // Non-cash payments must be full
+    amountPaid >= finalTotal ||  // Full payment
+    (selectedCustomer && amountPaid > 0) // Known customer can have due (partial payment)
   )
+  
+  // Check if customer needs to be registered for due payment
+  const needsCustomerRegistration = paymentMethod === 'CASH' && amountPaid < finalTotal && !selectedCustomer
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Process Payment">
@@ -446,9 +462,21 @@ export function PaymentModal({ isOpen, onClose, onPaymentComplete, cartItems, to
                 <span>${taxAmount.toFixed(2)}</span>
               </div>
               <div className="flex justify-between font-bold text-lg border-t border-slate-200 dark:border-slate-600 pt-2 text-slate-900 dark:text-slate-100">
-                <span>Total:</span>
-                <span>${finalTotal.toFixed(2)}</span>
+                <span>Subtotal + Tax:</span>
+                <span>${baseTotal.toFixed(2)}</span>
               </div>
+              {existingDue > 0 && (
+                <div className="flex justify-between text-red-600 dark:text-red-400 font-medium">
+                  <span>+ Existing Due:</span>
+                  <span>${existingDue.toFixed(2)}</span>
+                </div>
+              )}
+              {existingDue > 0 && (
+                <div className="flex justify-between font-bold text-xl border-t border-slate-200 dark:border-slate-600 pt-2 text-slate-900 dark:text-slate-100">
+                  <span>Grand Total:</span>
+                  <span>${finalTotal.toFixed(2)}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -510,7 +538,10 @@ export function PaymentModal({ isOpen, onClose, onPaymentComplete, cartItems, to
               type="number"
               id="amountPaid"
               value={amountPaid}
-              onChange={(e) => setAmountPaid(parseFloat(e.target.value) || 0)}
+              onChange={(e) => {
+                const value = parseFloat(e.target.value) || 0
+                setAmountPaid(parseFloat(value.toFixed(2)))
+              }}
               step="0.01"
               min="0"
               className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 px-3 py-2 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
@@ -522,9 +553,38 @@ export function PaymentModal({ isOpen, onClose, onPaymentComplete, cartItems, to
               </p>
             )}
             {amountPaid < finalTotal && (
-              <p className="mt-2 text-sm text-red-600 dark:text-red-400">
-                Insufficient payment. Need ${(finalTotal - amountPaid).toFixed(2)} more.
-              </p>
+              <div className="mt-2">
+                {selectedCustomer ? (
+                  <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                    <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+                      💰 Due Payment Mode
+                    </p>
+                    <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
+                      Amount paid: <span className="font-bold">${amountPaid.toFixed(2)}</span>
+                    </p>
+                    <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                      Will be added to due: <span className="font-bold">${dueAmount.toFixed(2)}</span>
+                    </p>
+                    {selectedCustomer.dueAmount > 0 && (
+                      <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+                        Existing due: ${selectedCustomer.dueAmount.toFixed(2)} → New total: ${(selectedCustomer.dueAmount + dueAmount).toFixed(2)}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                    <p className="text-sm font-medium text-red-800 dark:text-red-200">
+                      ⚠️ Customer Registration Required
+                    </p>
+                    <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+                      Insufficient payment (Need ${dueAmount.toFixed(2)} more)
+                    </p>
+                    <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                      To allow due payments, please register the customer above using the "+ New Customer" button
+                    </p>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -642,13 +702,26 @@ export function PaymentModal({ isOpen, onClose, onPaymentComplete, cartItems, to
           {selectedCustomer && (
             <div className="mb-3 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl">
               <div className="flex items-start justify-between">
-                <div>
+                <div className="flex-1">
                   <p className="font-medium text-green-900 dark:text-green-100">{selectedCustomer.name}</p>
                   <p className="text-sm text-green-700 dark:text-green-300">ID: {selectedCustomer.customerId}</p>
                   {selectedCustomer.dueAmount > 0 && (
-                    <p className="text-sm text-red-600 dark:text-red-400 font-medium mt-1">
-                      Due: ${selectedCustomer.dueAmount.toFixed(2)}
-                    </p>
+                    <div className="mt-2">
+                      <p className="text-sm text-red-600 dark:text-red-400 font-medium">
+                        Outstanding Due: ${selectedCustomer.dueAmount.toFixed(2)}
+                      </p>
+                      <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={includeDueInTransaction}
+                          onChange={(e) => setIncludeDueInTransaction(e.target.checked)}
+                          className="w-4 h-4 text-brand-600 bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 rounded focus:ring-brand-500 focus:ring-2"
+                        />
+                        <span className="text-xs text-slate-700 dark:text-slate-300">
+                          Add existing due to this transaction
+                        </span>
+                      </label>
+                    </div>
                   )}
                   {selectedCustomer.purchaseCount > 0 && (
                     <p className="text-xs text-green-600 dark:text-green-400 mt-1">
